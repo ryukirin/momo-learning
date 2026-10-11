@@ -2,6 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { config } from '../config.js';
 /** Scope key of the one-time plan-wide backfill, the only read that can prove coverage. */
 export const BACKFILL_SCOPE_KEY = 'backfill:all';
+/**
+ * Upsert assignment for a word's spelling that never trades a known spelling for
+ * an empty one: upstream returns some words' records with an empty spelling, and
+ * overwriting a spelling another read already supplied would lose it for good.
+ */
+const KEEP_KNOWN_SPELLING = `spelling=CASE WHEN trim(excluded.spelling) <> '' THEN excluded.spelling ELSE mirror_word.spelling END`;
 export class MirrorRepository {
     db;
     constructor(db) {
@@ -26,7 +32,7 @@ export class MirrorRepository {
                 .run(syncId, `today:${day}`, requestedLocalDate, words.length, `上游 order 的前 ${words.length} 项`, completeness, words.length ? 'success' : 'empty', now, now);
             const word = this.db
                 .prepare(`INSERT INTO mirror_word(word_id, spelling, first_seen_at, last_seen_at, plan_state, plan_state_updated_at, latest_sync_id)
-        VALUES (?, ?, ?, ?, 'current', ?, ?) ON CONFLICT(word_id) DO UPDATE SET spelling=excluded.spelling,last_seen_at=excluded.last_seen_at,latest_sync_id=excluded.latest_sync_id`);
+        VALUES (?, ?, ?, ?, 'current', ?, ?) ON CONFLICT(word_id) DO UPDATE SET ${KEEP_KNOWN_SPELLING},last_seen_at=excluded.last_seen_at,latest_sync_id=excluded.latest_sync_id`);
             const item = this.db.prepare('INSERT INTO today_item VALUES (?, ?, ?, ?, ?, ?, ?)');
             for (const value of words) {
                 word.run(value.wordId, value.spelling, now, now, now, syncId);
@@ -155,7 +161,7 @@ export class MirrorRepository {
         // Register the word first, as every other write path does: a mistake must
         // never be lost because the word had not been mirrored yet.
         const word = this.db.prepare(`INSERT INTO mirror_word(word_id,spelling,first_seen_at,last_seen_at,plan_state,plan_state_updated_at,latest_sync_id)
-       VALUES(?,?,?,?,'current',?,NULL) ON CONFLICT(word_id) DO UPDATE SET spelling=excluded.spelling,last_seen_at=excluded.last_seen_at`);
+       VALUES(?,?,?,?,'current',?,NULL) ON CONFLICT(word_id) DO UPDATE SET ${KEEP_KNOWN_SPELLING},last_seen_at=excluded.last_seen_at`);
         const upsert = this.db.prepare(`INSERT INTO quiz_mistake(word_id,spelling,first_missed_day,last_missed_day,miss_count,last_prompt,last_type,cleared_day)
        VALUES(?,?,?,?,1,?,?,NULL)
        ON CONFLICT(word_id) DO UPDATE SET
@@ -223,13 +229,19 @@ export class MirrorRepository {
      *
      * The pool is the plan rather than today's list: a word just learned is still in
      * short-term memory, so quizzing it tests nothing, while a word met a while ago
-     * and partly forgotten is exactly what retrieval practice is for. Three rules do
-     * that — never study a word twice in one day, skip words first met today, and
-     * prefer a real gap since the word was last seen — with today's misses kept as
-     * an explicit exception, because "reviewed it today and still got it wrong" is
-     * the strongest signal the app can give.
+     * and partly forgotten is exactly what retrieval practice is for. Four rules do
+     * that — never study a word twice in one day, skip words first met today, skip
+     * words the app's first answer today confirmed as known, and prefer a real gap
+     * since the word was last seen — with today's misses kept as an explicit
+     * exception, because "reviewed it today and still got it wrong" is the strongest
+     * signal the app can give. The known-today rule is checked directly rather than
+     * left to the gap: a zero gap, or a record refresh that failed and left the last
+     * study day stale, would otherwise let those words back in. A word whose spelling
+     * upstream never supplied cannot be asked about at all, so it is left out and
+     * only counted.
      * @param options - how many words, the minimum gap, and today's Beijing day.
-     * @returns the ranked candidates, each carrying the reason it was chosen.
+     * @returns the ranked candidates, each carrying the reason it was chosen, and how
+     * many otherwise eligible words were left out for having no spelling.
      */
     listQuizCandidates(options) {
         const today = this.latestToday();
@@ -237,11 +249,13 @@ export class MirrorRepository {
         const gapCutoff = new Date(Date.parse(`${options.day}T00:00:00Z`) - options.minDaysSinceStudy * 86_400_000)
             .toISOString()
             .slice(0, 10);
-        const where = `
+        const eligible = `
       word.plan_state = 'current'
       AND record.last_study_date IS NOT NULL
       AND COALESCE(today.is_new, 0) = 0
+      AND COALESCE(today.first_response, '') NOT IN ('FAMILIAR', 'WELL_FAMILIAR')
       AND (record.last_study_date <= ? OR today.first_response IN ('FORGET', 'VAGUE'))`;
+        const where = `${eligible} AND trim(word.spelling) <> ''`;
         // Tier first, then the longest gap since the word was last seen: a word met a
         // while ago and not since is the one worth retrieving.
         const tier = `
@@ -278,8 +292,8 @@ export class MirrorRepository {
          ORDER BY tier DESC, record.last_study_date ASC, record.word_id
          LIMIT ?`)
             .all(todaySyncId, gapCutoff, options.limit);
-        const total = this.db.prepare(`SELECT COUNT(*) AS count ${from} WHERE ${where}`).get(todaySyncId, gapCutoff).count;
-        return { words, total };
+        const count = (condition) => this.db.prepare(`SELECT COUNT(*) AS count ${from} WHERE ${condition}`).get(todaySyncId, gapCutoff).count;
+        return { words, total: count(where), skippedNoSpelling: count(`${eligible} AND trim(word.spelling) = ''`) };
     }
     /**
      * Record that a plan-wide walk proved it covered the whole plan.
@@ -354,7 +368,7 @@ export class MirrorRepository {
                 .run(syncId, scopeKey, sourceLimit, words.length, knownTotal ?? null, scopeKey, completeness, words.length ? 'success' : 'empty', now, now);
             const word = this.db
                 .prepare(`INSERT INTO mirror_word(word_id,spelling,first_seen_at,last_seen_at,plan_state,plan_state_updated_at,latest_sync_id)
-        VALUES(?,?,?,?,'current',?,?) ON CONFLICT(word_id) DO UPDATE SET spelling=excluded.spelling,last_seen_at=excluded.last_seen_at,plan_state='current',plan_state_updated_at=excluded.plan_state_updated_at,latest_sync_id=excluded.latest_sync_id`);
+        VALUES(?,?,?,?,'current',?,?) ON CONFLICT(word_id) DO UPDATE SET ${KEEP_KNOWN_SPELLING},last_seen_at=excluded.last_seen_at,plan_state='current',plan_state_updated_at=excluded.plan_state_updated_at,latest_sync_id=excluded.latest_sync_id`);
             const member = this.db.prepare('INSERT INTO study_window_member(sync_id,word_id) VALUES(?,?)');
             const record = this.db.prepare(`INSERT INTO study_record(word_id,add_date,first_study_date,last_study_date,next_study_date,study_count,tags,observed_at,latest_sync_id)
         VALUES(?,?,?,?,?,?,?,?,?)

@@ -171,13 +171,19 @@ export declare class MirrorRepository {
      *
      * The pool is the plan rather than today's list: a word just learned is still in
      * short-term memory, so quizzing it tests nothing, while a word met a while ago
-     * and partly forgotten is exactly what retrieval practice is for. Three rules do
-     * that — never study a word twice in one day, skip words first met today, and
-     * prefer a real gap since the word was last seen — with today's misses kept as
-     * an explicit exception, because "reviewed it today and still got it wrong" is
-     * the strongest signal the app can give.
+     * and partly forgotten is exactly what retrieval practice is for. Four rules do
+     * that — never study a word twice in one day, skip words first met today, skip
+     * words the app's first answer today confirmed as known, and prefer a real gap
+     * since the word was last seen — with today's misses kept as an explicit
+     * exception, because "reviewed it today and still got it wrong" is the strongest
+     * signal the app can give. The known-today rule is checked directly rather than
+     * left to the gap: a zero gap, or a record refresh that failed and left the last
+     * study day stale, would otherwise let those words back in. A word whose spelling
+     * upstream never supplied cannot be asked about at all, so it is left out and
+     * only counted.
      * @param options - how many words, the minimum gap, and today's Beijing day.
-     * @returns the ranked candidates, each carrying the reason it was chosen.
+     * @returns the ranked candidates, each carrying the reason it was chosen, and how
+     * many otherwise eligible words were left out for having no spelling.
      */
     listQuizCandidates(options: {
         limit: number;
@@ -186,6 +192,7 @@ export declare class MirrorRepository {
     }): {
         words: Record<string, unknown>[];
         total: number;
+        skippedNoSpelling: number;
     };
     /**
      * Record that a plan-wide walk proved it covered the whole plan.

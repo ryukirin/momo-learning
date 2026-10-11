@@ -1,6 +1,6 @@
 # dsh-momo-learning
 
-墨墨背单词的 DeepSeek Harness 插件。它把你墨墨账号的学习数据同步到本机 SQLite，然后在本地出选择题考你：每天 20 题，一题一题弹窗问，错了记进错题本，答完写一份日报。
+墨墨背单词的 DeepSeek Harness 插件。它把你墨墨账号的学习数据同步到本机 SQLite，然后在本地出选择题考你：每天 20 题，一题一题弹窗问，每题答完给解析，错了记进错题本，答完写一份日报。
 
 整个过程只读，不改你的墨墨账号。
 
@@ -10,11 +10,11 @@
 
 墨墨 App 已经在做记忆这件事了，所以这里管得很窄：
 
-- App 判定为「认识」的词不考
+- 今天 App 判定为「认识」的词不考
 - 今天刚新学的词也不考，刚背完还在短期记忆里，考了没意义
 - 只考那些学过一阵子、已经有点忘的词
 
-不代替 App 复习。也不做账号写入——加词、改复习状态、云词本都没有对应工具。
+不代替 App 复习。当天到期的词没在 App 里复习完时，会先提示回 App 完成；提前复习加进来但没作答的词不算在内。也不做账号写入——加词、改复习状态、云词本都没有对应工具。
 
 ## 前置条件
 
@@ -80,18 +80,29 @@ npm run migrate-legacy -- --yes
 ## 示例
 
 ```text
-你：开始今天的
+你：开始今天的墨墨
+
+（先检查今天的 App 复习是否完成，完成后同步并出题）
 
 （弹窗，第 1/20 题）
   The committee will ___ the remaining issues at next week's meeting.
-  ○ address    ○ dress    ○ redress    ○ regress
+  ○ redress    ○ address    ○ regress    ○ dress
 
 你选了 address
 
-✓ 正确。address 这里是及物动词「处理、着手解决」，不是常见的名词「地址」。
-  搭配：address an issue / a problem / a concern
-  例句：The report addresses the risks of long-term debt.（这份报告论述了长期债务的风险。）
-  易错点：后面接 issue / problem / question 时读作「处理」，跟「地址」没关系。
+q1 答对（你选 address，正确答案 address）
+
+题目翻译：委员会将在下周的会议上处理剩下的问题。
+
+考点：address（及物动词），处理、着手解决。考的是动词义，不是常见的名词「地址」。
+
+选项辨析
+- redress：纠正、补救。错，对象通常是不公或失衡（redress a grievance），不是一般的待议问题。
+- address：处理、解决。正确，后面接 the remaining issues，正是「处理问题」。
+- regress：倒退、退化。错，不及物动词，后面不能直接接宾语。
+- dress：给……穿衣、装饰。错，和 address 形近，但不能接 issues。
+
+一句话记住：address an issue＝处理问题；redress a grievance＝纠正不公。
 
 （第 2/20 题…）
 
@@ -99,7 +110,7 @@ npm run migrate-legacy -- --yes
 日报写到 reports/momo-2026-09-14.md。
 ```
 
-每题都给中文释义，答对也给。答对不代表真会，释义写出来你才知道自己是不是蒙的。
+每题都给解析，答对也给。答对不代表真会，解析写出来你才知道自己是不是蒙的。
 
 ## 出题范围
 
@@ -109,7 +120,9 @@ npm run migrate-legacy -- --yes
 maimemo_list_quiz_candidates({ limit: 20 })
 ```
 
-排序写在 SQL 里：错题本里没消除的排最前，然后是墨墨打了 `STICKING` 标签的顽固词，再是今天复习时答错、答模糊的，最后是学得少的。同一档里，距上次学习越久的排越前。今天新学的词已经被排除，默认也只取距上次学习至少一天以上的（`minDaysSinceStudy`，默认 1）。每个词都带一个 `reason`，说明它为什么被选中。
+排序写在 SQL 里：错题本里没消除的排最前，然后是墨墨打了 `STICKING` 标签的顽固词，再是今天复习时答错、答模糊的，然后是学得少的，最后是其余距上次学习较久的。同一档里，距上次学习越久的排越前。每个词都带一个 `reason`，说明它为什么被选中。
+
+不进候选的词：今天新学的词、今天 App 判为「认识」的词，以及距上次学习不足 `minDaysSinceStudy` 天（默认 1）的词。今天复习答错、答模糊的词不受间隔限制。墨墨没有返回拼写的词无法出题，也会跳过。
 
 每天 20 题，上限 50。候选池经常有几百个词，只取 20，不是有 n 个词就出 n 道题。
 
@@ -125,13 +138,17 @@ maimemo_list_quiz_candidates({ limit: 20 })
 - **形近辨析**：给英文释义，问是哪个词
 - **熟词僻义**：句子里用的是生僻义项，问此处什么意思。干扰项里会放这个词最常见的那个意思
 
-不出中英对译（给中文选英文、给英文选中文释义），也不出「给词根选变形」这种题。App 已经在考词义了，再考一遍没意义。题干里不出现中文。
+不出中英对译（给中文选英文、给英文选中文释义），也不出「给词根选变形」这种题。App 已经在考词义了，再考一遍没意义。题干里不出现中文，正确选项的位置随机。
 
-形近选项由 `maimemo_find_similar_words` 提供，它在本地拼写里按编辑距离排。单词效果好（`adapt` / `adopt`），多词短语偏弱（`stiff price` 只能匹配到 `soaring price`），这类词就换同义或同词根的角度出。
+形近选项由 `maimemo_find_similar_words` 提供，它在本地拼写里按编辑距离排。单词效果好（`adapt` / `adopt`），多词短语偏弱：按整串拼写计算编辑距离，匹配结果通常只是共用一个词的短语，这类词改用同义或同词根的角度出。
 
 ## 一题一题问
 
-用 `ask_user_question` 弹窗问，一次一题，等回答再出下一题，不会一次把 20 题列出来。答完先判对错，再给答案和解析。
+用 `ask_user_question` 弹窗问，一次一题，等回答再出下一题，不会一次把 20 题列出来。
+
+答完先判对错，再给解析：题目的中文翻译，目标词在句中的词义、词性和本题考的义项或搭配，四个选项各自对错的原因，最后一句总结。答错时额外给一条同义项例句。解析写完才出下一题。
+
+需要逐题停顿时，可以让它每题解析后暂停，说「继续」再出下一题。也可以要求一次出完，按题号作答后统一解析。
 
 ## 错题和日报
 
@@ -154,7 +171,7 @@ maimemo_list_quiz_candidates({ limit: 20 })
 
 本地查记录用 `maimemo_query_local_records`，可以按北京时间的日期范围（`last_study_date` / `first_study_date` / `next_study_date` / `add_date`）、标签 `STICKING` / `WELL_FAMILIAR`、学习次数区间筛，支持分页。
 
-## 不漏、不重复
+## 完整性与去重
 
 只有走到的词数对上上游 `as_count` 才标 `complete`。滑窗不前进或者撞到页数上限就停下，标 `partial` 并给警告，不会假装走完了。
 
@@ -168,9 +185,11 @@ maimemo_list_quiz_candidates({ limit: 20 })
 
 **`maimemo_auth_status` 返回 `configured: false`**：凭证没配，跑 `npm run credential -- set`。
 
-**同步回来 0 个词**：先看凭证对应的账号对不对。我遇到过这种情况，凭证能用、接口也返回 200，但数据全是空的，换成平时刷的那个账号之后立刻就正常了。另一种可能是 App 里「自动同步」没开，服务端没数据，接口只能返回空。
+**同步回来 0 个词**：确认凭证对应的是平时使用的墨墨账号，并且 App 里开启了「自动同步」。
 
 **查询提示只覆盖已验证范围**：先跑一次 `maimemo_backfill_study_records`。
+
+**App 里已复习完，仍提示先回 App**：判断只看当天到期的词。`maimemo_get_day_state` 返回的 `unfinished.due` 列出了未完成的词，可以和 App 对照。
 
 **`--dump-config` 看不到两行**：profile 没装上，或者包路径不对。看 `$DSH_HOME/profiles/<profile>/package.json` 里 `dsh.profile.bundles` 有没有 `dsh-momo-learning`。
 
@@ -241,6 +260,7 @@ dsh plugin --profile <profile> remove dsh-momo-learning
 - 插件声明了 `inject: ['skills']`，组合里得有 `@deepseek-ai/dsh-skill`（`dsh-base` 已经挂了）。精简组合缺它的话这一行会停在待激活
 - MCP 服务要能 spawn 带管道的子进程。把 stdio 管道禁掉的受限沙箱里工具会连不上，正常启动的 Harness 没这个问题
 - 逐题弹窗依赖 `ask_user_question`，没有 UI 的会话会退化成一次一题的普通消息提问
+- 部分词墨墨不返回拼写，这些词无法出题，会被跳过
 - 全量回填覆盖的是计划里的词。墨墨没有按历史日期取当天词表的接口，所以开始用之前的逐日清单补不回来，可靠的分日历史从开始每天存快照那天起积累
 - 全量回填之后新加进计划的词，要等下次回填或者出现在某天词表里才会进镜像
 - `find_similar_words` 对多词短语偏弱

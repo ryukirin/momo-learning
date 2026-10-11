@@ -88,5 +88,46 @@ test('只记错题不留流水，日报落盘到工作区', () => {
 });
 
 test('解析无论对错都写中文释义', () => {
-  assert.match(skill, /无论答对还是答错，解析里都要写出该词的中文释义/);
+  assert.match(skill, /无论答对还是答错，每题解析都必须包含/);
+  assert.match(skill, /目标词或短语的中文释义（含词性）/);
+  // Explaining only the right option cannot tell a lucky guess from real knowledge.
+  assert.match(skill, /四个选项逐项辨析/);
+});
+
+test('每题先写可见的解析，再记录，最后才弹下一题；答对也不例外', () => {
+  // Without a fixed order a correct answer can skip straight to the next popup,
+  // so the order is pinned and the explanation must be visible reply text.
+  assert.match(skill, /### 每题的固定顺序/);
+  assert.match(skill, /解析必须是用户看得到的文字，只在思考里想过不算/);
+  assert.match(skill, /\*\*答对也一样要写\*\*/);
+  assert.match(skill, /解析写完才能弹下一题/);
+  // A fixed shape keeps the explanation substantive rather than a one-line verdict.
+  for (const heading of ['判定', '题目翻译', '考点', '选项辨析', '一句话记住']) {
+    assert.ok(skill.includes(`**${heading}**`), `解析格式应包含 ${heading}`);
+  }
+  // Claiming an explanation was given when it was not is worse than the omission.
+  assert.match(skill, /确实没写就直说漏了/);
+});
+
+test('开场覆盖全部分支：未学完就停，进度未知要先确认，报错不索要令牌', () => {
+  assert.match(skill, /"unknown"/);
+  // An unfinished day has no answers yet, so syncing it would save a partial snapshot.
+  assert.match(skill, /也不要继续同步/);
+  assert.match(skill, /reason: "start_daily_todo"/);
+  assert.match(skill, /CREDENTIAL_MISSING/);
+  assert.match(skill, /不得在对话里索要或接收令牌/);
+  assert.match(skill, /RATE_LIMITED/);
+});
+
+test('同一次答错只提交一次，避免累计次数翻倍', () => {
+  // The tool adds one to the count on every call, so a second submission of the
+  // same miss would double it and skew both the report and tomorrow's order.
+  assert.match(skill, /同一次答错只提交一次/);
+  assert.match(skill, /不要\*\*把已经记过的错题再交一遍/);
+});
+
+test('正确项位置随机，日报日期用工具返回的 day', () => {
+  // A predictable answer position lets the user answer without recalling the word.
+  assert.match(skill, /正确项的位置随机/);
+  assert.match(skill, /日期用开场记下的 `day`/);
 });

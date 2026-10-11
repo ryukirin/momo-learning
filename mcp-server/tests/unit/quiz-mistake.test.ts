@@ -157,3 +157,73 @@ test('间隔过滤挡住刚碰过的词，但今天没记住的例外', () => {
     ['forgot', 'aged', 'touched']
   );
 });
+
+test('墨墨没给拼写的词不进候选，只计数', () => {
+  const db = new Database(':memory:');
+  migrate(db);
+  const repository = new MirrorRepository(db);
+  repository.saveStudyWindow(
+    [
+      {
+        wordId: 'blank',
+        spelling: '',
+        lastStudyDate: '2026-09-01',
+        studyCount: 3,
+        tags: ['STICKING']
+      },
+      { wordId: 'named', spelling: 'named', lastStudyDate: '2026-09-01', studyCount: 3 }
+    ],
+    'backfill:all',
+    undefined,
+    2
+  );
+
+  const listing = repository.listQuizCandidates({
+    limit: 20,
+    minDaysSinceStudy: 1,
+    day: '2026-09-13'
+  });
+  // A word with no spelling cannot be asked about, however high its tier.
+  assert.deepEqual(
+    listing.words.map((word) => word.wordId),
+    ['named']
+  );
+  assert.equal(listing.total, 1);
+  assert.equal(listing.skippedNoSpelling, 1);
+});
+
+test('今天 App 判认识的词一律不进候选，不靠间隔规则间接排除', () => {
+  const db = new Database(':memory:');
+  migrate(db);
+  const repository = new MirrorRepository(db);
+  repository.saveToday(
+    [
+      { wordId: 'known', spelling: 'known', order: 1, isNew: false, firstResponse: 'FAMILIAR' },
+      { wordId: 'sure', spelling: 'sure', order: 2, isNew: false, firstResponse: 'WELL_FAMILIAR' },
+      { wordId: 'vague', spelling: 'vague', order: 3, isNew: false, firstResponse: 'VAGUE' }
+    ],
+    '2026-09-13'
+  );
+  repository.saveStudyWindow(
+    [
+      // A refresh that failed leaves the last study day stale, so the gap rule
+      // alone would admit this word even though the app confirmed it today.
+      { wordId: 'known', spelling: 'known', lastStudyDate: '2026-09-01', studyCount: 3 },
+      { wordId: 'sure', spelling: 'sure', lastStudyDate: '2026-09-13', studyCount: 3 },
+      { wordId: 'vague', spelling: 'vague', lastStudyDate: '2026-09-13', studyCount: 3 }
+    ],
+    'backfill:all',
+    undefined,
+    3
+  );
+  // A mistake-book word confirmed known today waits for another day as well.
+  repository.saveQuizMistakes('2026-09-12', [{ wordId: 'known', spelling: 'known' }]);
+
+  // No gap required, which is the other way the gap rule stops guarding.
+  assert.deepEqual(
+    repository
+      .listQuizCandidates({ limit: 20, minDaysSinceStudy: 0, day: '2026-09-13' })
+      .words.map((word) => word.wordId),
+    ['vague']
+  );
+});

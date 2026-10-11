@@ -1,13 +1,17 @@
 import { MaimemoClient } from './maimemo-client.js';
 import { diagnostic } from '../redaction.js';
 
-/** The answer 墨墨 recorded the first time a word came up today. */
+/**
+ * The answer 墨墨 recorded the first time a word came up today;
+ * `STUDY_RESPONSE_UNSPECIFIED` marks an item still unanswered.
+ */
 export type StudyResponse =
   | 'FAMILIAR'
   | 'VAGUE'
   | 'FORGET'
   | 'WELL_FAMILIAR'
-  | 'CANCEL_WELL_FAMILIAR';
+  | 'CANCEL_WELL_FAMILIAR'
+  | 'STUDY_RESPONSE_UNSPECIFIED';
 
 export interface TodayItem {
   voc_id: string;
@@ -18,6 +22,42 @@ export interface TodayItem {
   is_new?: boolean;
   is_finished?: boolean;
 }
+
+/** Today's unanswered items, split by whether they were due today at all. */
+export interface UnfinishedSplit {
+  /** Spellings of open items due today or earlier, or whose next study day is unknown. */
+  due: string[];
+  /** Spellings of open items whose next study day is still after today. */
+  ahead: string[];
+}
+
+/**
+ * Split today's unanswered items by whether they were due today.
+ *
+ * Reviewing ahead in the app pulls later words into today's list, and upstream's
+ * progress counts them toward today's total, so one left unanswered keeps
+ * `finished` below `total` although everything due today is done. An open word
+ * whose next study day is still after today was never due today; a word whose
+ * next study day is unknown proves nothing and counts as due.
+ * @param items - today's list.
+ * @param nextStudyDays - each word's next study day, as a Beijing `YYYY-MM-DD`.
+ * @param day - today, as a Beijing `YYYY-MM-DD`.
+ * @returns the open items' spellings, split by whether they are due today.
+ */
+export const splitUnfinished = (
+  items: readonly TodayItem[],
+  nextStudyDays: ReadonlyMap<string, string | undefined>,
+  day: string
+): UnfinishedSplit => {
+  const split: UnfinishedSplit = { due: [], ahead: [] };
+  for (const item of items) {
+    if (item.is_finished === true) continue;
+    const next = nextStudyDays.get(item.voc_id);
+    if (next !== undefined && next > day) split.ahead.push(item.voc_spelling);
+    else split.due.push(item.voc_spelling);
+  }
+  return split;
+};
 
 export const getTodayItems = async (client: MaimemoClient): Promise<TodayItem[]> => {
   const response = await client.post<{ today_items?: TodayItem[] }>(

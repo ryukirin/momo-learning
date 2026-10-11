@@ -4,6 +4,27 @@ import Database from 'better-sqlite3';
 import { migrate } from '../../src/db/migrations.js';
 import { MirrorRepository } from '../../src/db/mirror-repository.js';
 
+test('上游返回空拼写时保留已知拼写', () => {
+  const db = new Database(':memory:');
+  migrate(db);
+  const repository = new MirrorRepository(db);
+  repository.saveToday([{ wordId: 'w1', spelling: 'pollute', order: 1 }], '2026-10-11');
+  // Some study records come back with an empty spelling; that must not erase one
+  // another read already supplied.
+  repository.saveStudyWindow([{ wordId: 'w1', spelling: '' }], 'words:2026-10-11', undefined, 1);
+  repository.saveQuizMistakes('2026-10-11', [{ wordId: 'w1', spelling: '' }]);
+  assert.deepEqual(repository.allWords(), [{ wordId: 'w1', spelling: 'pollute' }]);
+
+  // A real new spelling still replaces the old one.
+  repository.saveStudyWindow(
+    [{ wordId: 'w1', spelling: 'polluted' }],
+    'words:2026-10-12',
+    undefined,
+    1
+  );
+  assert.deepEqual(repository.allWords(), [{ wordId: 'w1', spelling: 'polluted' }]);
+});
+
 test('学习记录完整同步才更新当前规划状态，并保存记录字段', () => {
   const db = new Database(':memory:');
   migrate(db);
@@ -205,8 +226,8 @@ test('上游 order 重复时仍能保存当天快照，并按 order+word_id 稳�
   const db = new Database(':memory:');
   migrate(db);
   const repository = new MirrorRepository(db);
-  // Real upstream data: 150 items across 135 distinct orders, so duplicate
-  // orders are the normal case and must never reject a snapshot.
+  // Upstream lets several items in one day's list share an order, so duplicate
+  // orders are a normal case and must never reject a snapshot.
   const sync = repository.saveToday(
     [
       { wordId: 'b-second', spelling: 'second', order: 10 },

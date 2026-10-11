@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { MaimemoClient } from '../api/maimemo-client.js';
-import { getTodayItems, getStudyProgress } from '../api/today-items.js';
+import { getTodayItems, getStudyProgress, splitUnfinished } from '../api/today-items.js';
 import { countStudyRecords, getStudyRecords, getStudyRecordsByWordIds, getStudyRecordsPage } from '../api/study-records.js';
 import { assertPageSize, assertWordIds, config } from '../config.js';
 import { MaimemoError, toMaimemoError } from '../errors.js';
@@ -101,11 +101,10 @@ const walkStudyRecords = async (mirror, db, client, options) => {
  * observed today, today's snapshot list is authoritative for today, so only those
  * words can have moved and they are refreshed by name. When whole days are
  * missing, no narrower read can be complete: upstream filters records only by next
- * study day, and studying a word pushes that day into the future — measured on one
- * real plan, every one of the 272 words studied across a three-day gap had moved
- * outside a window covering it, and newly learned words were re-scheduled up to 89
- * days out on the day they were learned. A missed day's word list cannot be fetched
- * after the fact either. The plan is walked whole instead, which also discovers
+ * study day, and studying a word pushes that day into the future, so a window
+ * covering the gap misses exactly the words studied during it; a newly learned word
+ * can be scheduled weeks out on the day it is learned. A missed day's word list
+ * cannot be fetched after the fact either. The plan is walked whole instead, which also discovers
  * words added during the gap.
  * @param mirror - the local mirror.
  * @param db - the open database, for the stored row counts.
@@ -147,6 +146,20 @@ const refreshStudyRecords = async (mirror, db, client, day, todayWordIds) => {
     // completeness keeps it from ever marking a word as no longer planned.
     undefined, Math.max(records.length, 1));
     return { lastObservedAt: lastObservedAt ?? null, gapDays, mode, words: records.length, calls };
+};
+/**
+ * Read today's open items and split them by whether they were due today.
+ * @param client - the upstream client.
+ * @param day - today in 墨墨's timezone.
+ * @returns the open items' spellings, split into due today and pulled forward.
+ */
+const readUnfinished = async (client, day) => {
+    const open = (await getTodayItems(client)).filter((item) => item.is_finished !== true);
+    if (open.length === 0)
+        return { due: [], ahead: [] };
+    const { records } = await getStudyRecordsByWordIds(client, open.map((item) => item.voc_id));
+    const nextStudyDays = new Map(records.map((record) => [record.voc_id, record.next_study_date]));
+    return splitUnfinished(open, nextStudyDays, day);
 };
 export const registerTools = (server, db, secrets) => {
     const mirror = new MirrorRepository(db);
@@ -379,7 +392,7 @@ export const registerTools = (server, db, secrets) => {
         }
     });
     server.registerTool('maimemo_list_quiz_candidates', {
-        description: '从整个镜像里挑当天要考的词，按不熟程度排序：本地错题 > 墨墨标记顽固 > 今天复习没记住 > 学得少；已排除今天刚新学的词。只读本地。',
+        description: '从整个镜像里挑当天要考的词，按不熟程度排序：本地错题 > 墨墨标记顽固 > 今天复习忘记 > 今天复习模糊 > 学得少 > 间隔较久；已排除今天新学的词和今天 App 判认识（FAMILIAR/WELL_FAMILIAR）的词，并要求距上次学习至少 minDaysSinceStudy 天（今天复习没记住的除外）。只读本地。',
         inputSchema: strictObject({
             limit: z.number().int().min(1).max(50).default(20),
             minDaysSinceStudy: z.number().int().min(0).max(60).default(1)
@@ -394,14 +407,22 @@ export const registerTools = (server, db, secrets) => {
                 warnings.push('尚无证明覆盖整个计划的回填，候选只来自本地已验证范围。');
             if (listing.words.length === 0)
                 warnings.push('没有符合条件的候选词；可放宽 minDaysSinceStudy 或先做全量回填。');
-            return result(envelope({ day, words: listing.words, total: listing.total, minDaysSinceStudy }, 'local_mirror', coverage === undefined ? 'unknown' : 'complete', warnings, coverage));
+            if (listing.skippedNoSpelling > 0)
+                warnings.push(`有 ${listing.skippedNoSpelling} 个符合条件的词墨墨没有返回拼写，无法出题，已跳过。`);
+            return result(envelope({
+                day,
+                words: listing.words,
+                total: listing.total,
+                skippedNoSpelling: listing.skippedNoSpelling,
+                minDaysSinceStudy
+            }, 'local_mirror', coverage === undefined ? 'unknown' : 'complete', warnings, coverage));
         }
         catch (error) {
             return fail(error);
         }
     });
     server.registerTool('maimemo_record_quiz_mistakes', {
-        description: '记录本地出题中答错的词，供明天错题优先与日报使用；只写错题，不留答题流水；该词后来答对时可一并标记消除。',
+        description: '记录本地出题中答错的词，供明天错题优先与日报使用；只写错题，不留答题流水；该词后来答对时可一并标记消除。每次调用都会给 mistakes 里每个词的累计次数加 1，同一次答错只提交一次。',
         inputSchema: strictObject({
             day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '请使用北京时间 YYYY-MM-DD 日期。').optional(),
             mistakes: z
@@ -458,7 +479,7 @@ export const registerTools = (server, db, secrets) => {
         }
     });
     server.registerTool('maimemo_find_similar_words', {
-        description: '在本地计划的词里找与给定单词易混的形近词，用于给新学的词出辨识易错题；只读本地，不访问上游。',
+        description: '在本地计划的词里找与给定单词易混的形近词，用作出题的干扰项；只读本地，不访问上游。',
         inputSchema: strictObject({
             spelling: z.string().optional(),
             wordId: z.string().optional(),
@@ -482,7 +503,7 @@ export const registerTools = (server, db, secrets) => {
         }
     });
     server.registerTool('maimemo_get_day_state', {
-        description: '判断此刻该做什么：今天是否还有待学词、是否该先去 App 学完、以及本地镜像是否已跟上今天新增进规划的词。今天没有待学词时会顺带把计划读到最新。',
+        description: '判断此刻该做什么：今天是否还有到期未学的词、是否该先去 App 学完、以及本地镜像是否已跟上今天新增进规划的词。提前复习没做完的词不算未学完。今天没有待学词时会顺带把计划读到最新。',
         inputSchema: strictObject({})
     }, async () => {
         try {
@@ -505,6 +526,22 @@ export const registerTools = (server, db, secrets) => {
             else
                 decision = 'ready';
             const warnings = [];
+            // A gap between `finished` and `total` only means the day is unfinished when
+            // a word due today is still open: words pulled forward by reviewing ahead
+            // count toward the total too, and leaving one of them open is a choice.
+            let unfinished = null;
+            if (decision === 'finish-in-app') {
+                try {
+                    unfinished = await readUnfinished(client, day);
+                }
+                catch {
+                    warnings.push('无法确认没做完的词是否今天到期，按今天未学完处理。');
+                }
+                if (unfinished !== null && unfinished.due.length === 0 && unfinished.ahead.length > 0) {
+                    decision = 'ready';
+                    warnings.push(`今天到期的词都已完成；还有 ${unfinished.ahead.length} 个提前复习的词没做完（${unfinished.ahead.join('、')}），它们的下次学习日在今天之后，不影响出题。`);
+                }
+            }
             let walk = null;
             let newlyAdded = null;
             // Nothing is scheduled today, so there is nothing to study in the app —
@@ -535,6 +572,7 @@ export const registerTools = (server, db, secrets) => {
                 day,
                 decision,
                 progress: { finished, total, studyTimeMs: progress.study_time ?? null },
+                unfinished,
                 lastAddDate,
                 addDateCurrent,
                 newlyAdded,

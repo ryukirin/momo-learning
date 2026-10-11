@@ -154,7 +154,7 @@ const storedTableSql = (db, table) => {
  * Return whether a table still declares a uniqueness rule on its `upstream_order`.
  *
  * `/memo/study/get_today_items` publishes `order` as the study sequence, not as
- * an identity: one real day returned 150 items across 135 distinct orders. The
+ * an identity: several items in one day's list can share the same order. The
  * version-1 constraint therefore rejected valid upstream data, so the current
  * schema keys today's items and todo entries by word instead.
  * @param db - the open database.
