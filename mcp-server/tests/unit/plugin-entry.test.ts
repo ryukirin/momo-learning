@@ -80,15 +80,18 @@ interface Manifest {
   optionalDependencies?: Record<string, string>;
 }
 
-test('根目录只把 keyring 声明成可选依赖，其余依赖都打进了服务包', () => {
-  // The server bundle inlines its dependencies; only the native keyring addon
-  // stays outside, and an install without it just loses the OS-store fallback.
+test('插件没有运行时依赖，服务包只引用 Node 内置模块', () => {
+  // A plugin host installs nothing beside the bundle, so the root manifest
+  // declares no dependencies and the bundle imports only `node:` builtins.
   const root = readJson<Manifest>('../package.json');
-  const server = readJson<Manifest>('package.json');
   assert.equal(root.dependencies, undefined);
-  assert.deepEqual(root.optionalDependencies, {
-    '@napi-rs/keyring': server.dependencies?.['@napi-rs/keyring']
-  });
+  assert.equal(root.optionalDependencies, undefined);
+  const bundle = readFileSync(resolve(process.cwd(), 'dist/server.js'), 'utf8');
+  const imported = [...bundle.matchAll(/^import [^;]*? from ["']([^"']+)["']/gm)].map(
+    (match) => match[1]
+  );
+  assert.ok(imported.length > 0);
+  for (const specifier of imported) assert.match(specifier ?? '', /^node:/);
 });
 
 test('两个客户端的清单指向同一个包、同一个服务和同一份 skill', () => {
@@ -97,7 +100,7 @@ test('两个客户端的清单指向同一个包、同一个服务和同一份 s
   const plugin = readJson<{
     name: string;
     mcpServers: { maimemo: { command: string; args: string[]; env: Record<string, string> } };
-    userConfig: { maimemo_token: { sensitive?: boolean } };
+    userConfig: { maimemo_token: { sensitive?: boolean; required?: boolean } };
   }>('../.claude-plugin/plugin.json');
   const marketplace = readJson<{ plugins: { name: string; source: string }[] }>(
     '../.claude-plugin/marketplace.json'
@@ -116,6 +119,8 @@ test('两个客户端的清单指向同一个包、同一个服务和同一份 s
     MAIMEMO_TOKEN: '${user_config.maimemo_token}'
   });
   assert.equal(plugin.userConfig.maimemo_token.sensitive, true);
+  // The client is the only source of the token, so the setting cannot be left empty.
+  assert.equal(plugin.userConfig.maimemo_token.required, true);
   const patch = readFileSync(resolve(process.cwd(), '../cordis.patch.yml'), 'utf8');
   assert.match(patch, new RegExp(`name: '${root.name}'`));
   // Both clients read the skill from the same file.

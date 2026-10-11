@@ -1,10 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  HOST_TOKEN_VARIABLE,
-  HostTokenSecretStore,
-  KeyringSecretStore
-} from './auth/secret-store.js';
+import { HOST_TOKEN_VARIABLE, HostTokenSecretStore } from './auth/secret-store.js';
 import { openDatabase } from './db/database.js';
 import { diagnostic } from './redaction.js';
 import { registerTools } from './tools/register-tools.js';
@@ -15,11 +11,7 @@ const main = async (): Promise<void> => {
   // process later reads or reports can carry it along.
   const hostToken = process.env[HOST_TOKEN_VARIABLE];
   delete process.env[HOST_TOKEN_VARIABLE];
-  registerTools(
-    server,
-    openDatabase(),
-    new HostTokenSecretStore(hostToken, new KeyringSecretStore())
-  );
+  registerTools(server, openDatabase(), new HostTokenSecretStore(hostToken));
   await server.connect(new StdioServerTransport());
   diagnostic('墨墨学习 MCP 已通过 stdio 启动。');
 };

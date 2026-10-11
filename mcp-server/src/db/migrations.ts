@@ -113,10 +113,6 @@ const schema = `
       last_type TEXT,
       cleared_day TEXT
     );
-    CREATE TABLE IF NOT EXISTS merged_source (
-      path TEXT PRIMARY KEY,
-      merged_at TEXT NOT NULL
-    );
   `;
 
 /**

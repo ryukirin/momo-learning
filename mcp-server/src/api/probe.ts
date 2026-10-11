@@ -1,4 +1,4 @@
-import { KeyringSecretStore } from '../auth/secret-store.js';
+import { HOST_TOKEN_VARIABLE, HostTokenSecretStore } from '../auth/secret-store.js';
 import { openDatabase } from '../db/database.js';
 import { MaimemoClient } from './maimemo-client.js';
 import { getTodayItems } from './today-items.js';
@@ -8,7 +8,14 @@ const run = async (): Promise<void> => {
     process.stdout.write('实时探针仅可在交互式终端或使用 --yes 显式确认后运行。\n');
     return;
   }
-  const client = new MaimemoClient(new KeyringSecretStore());
+  const secrets = new HostTokenSecretStore(process.env[HOST_TOKEN_VARIABLE]);
+  if (secrets.get() === undefined) {
+    process.stdout.write(`请先设置环境变量 ${HOST_TOKEN_VARIABLE} 再运行探针。
+`);
+    process.exitCode = 1;
+    return;
+  }
+  const client = new MaimemoClient(secrets);
   try {
     const items = await getTodayItems(client);
     const db = openDatabase();

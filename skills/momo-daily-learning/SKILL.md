@@ -33,7 +33,6 @@ description: 墨墨背单词的每日巩固流程：先确认 App 今天的复�
 |---|---|
 | `AUTH_NOT_CONFIGURED`、`AUTH_INVALID` | 没有令牌或令牌已失效。请用户在客户端里配置墨墨令牌：DeepSeek Harness 写进凭据文件的 `MAIMEMO_TOKEN`，Claude Code 在插件设置里填写；改完重启客户端。**不得在对话里索要或接收令牌。** |
 | `AUTH_FORBIDDEN` | 令牌没有所需的读取权限，请用户在墨墨开放平台检查令牌。 |
-| `CREDENTIAL_STORAGE_UNAVAILABLE` | 系统凭据管理器当前不可用。请用户改在客户端里配置令牌（同上）。 |
 | `UPSTREAM_RATE_LIMITED` | 告诉用户按 `retryAfterSeconds` 等多久后再试。 |
 | `UPSTREAM_UNAVAILABLE`、`UPSTREAM_TIMEOUT`、`UPSTREAM_PROTOCOL_ERROR` | 墨墨暂时连不上。可以问用户是否直接用本地镜像出题，但要说明：今天的作答结果没有同步到，今天 App 已判认识的词可能被再考一遍。 |
 | `LOCAL_STORE_UNAVAILABLE` | 本地数据库读写失败。把 `message` 转述给用户，停在这一步。 |

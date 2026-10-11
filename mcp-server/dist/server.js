@@ -21433,171 +21433,20 @@ var StdioServerTransport = class {
 };
 
 // src/auth/secret-store.ts
-import { createRequire } from "node:module";
-
-// src/errors.ts
-var MaimemoError = class extends Error {
-  constructor(code, message, retryAfterSeconds) {
-    super(message);
-    this.code = code;
-    this.retryAfterSeconds = retryAfterSeconds;
-    this.name = "MaimemoError";
-  }
-  code;
-  retryAfterSeconds;
-};
-var toMaimemoError = (error2) => {
-  if (error2 instanceof MaimemoError) return error2;
-  const code = error2?.code;
-  if (typeof code === "string" && code.startsWith("SQLITE_")) {
-    return new MaimemoError("LOCAL_STORE_UNAVAILABLE", "\u672C\u5730\u5B66\u4E60\u955C\u50CF\u8BFB\u5199\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u6216\u6E05\u7406\u672C\u5730\u6570\u636E\u3002", void 0);
-  }
-  return new MaimemoError("UPSTREAM_UNAVAILABLE", "\u670D\u52A1\u6682\u65F6\u4E0D\u53EF\u7528\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002");
-};
-
-// src/config.ts
-var config2 = {
-  apiBaseUrl: "https://open.maimemo.com",
-  requestTimeoutMs: 1e4,
-  maxAttempts: 2,
-  localPageSizeMax: 50,
-  supplementBatchMax: 50,
-  upstreamCollectionMax: 1e3,
-  previewMax: 50,
-  credentialService: "momo-learning-mcp",
-  /** Service names earlier releases stored the token under; read after the current one. */
-  legacyCredentialServices: ["dsh.momo-learning-mcp", "codex.maimemo-learning-mcp"],
-  credentialAccount: "default",
-  /** Directory under the user's local app data that holds the mirror database. */
-  dataDirectoryName: "MomoLearning",
-  /** Directories earlier releases kept the mirror database in. */
-  legacyDataDirectoryNames: ["CodexMomoLearning"]
-};
-var assertPageSize = (value) => {
-  if (!Number.isInteger(value) || value < 1 || value > config2.localPageSizeMax) {
-    throw new MaimemoError("INVALID_ARGUMENT", "\u9875\u5927\u5C0F\u5FC5\u987B\u662F 1 \u5230 50 \u4E4B\u95F4\u7684\u6574\u6570\u3002");
-  }
-};
-var assertWordIds = (ids) => {
-  if (ids.length === 0 || ids.length > config2.supplementBatchMax || ids.some((id) => !id.trim())) {
-    throw new MaimemoError("INVALID_ARGUMENT", "\u5355\u8BCD\u6807\u8BC6\u6570\u91CF\u5FC5\u987B\u5728 1 \u5230 50 \u4E4B\u95F4\u3002");
-  }
-};
-
-// src/auth/secret-store.ts
-var openEntry = (service) => {
-  const keyring = createRequire(import.meta.url)("@napi-rs/keyring");
-  return new keyring.Entry(service, config2.credentialAccount);
-};
-var readServices = () => [
-  config2.credentialService,
-  ...config2.legacyCredentialServices
-];
-var KeyringSecretStore = class {
-  constructor(entryFactory = openEntry) {
-    this.entryFactory = entryFactory;
-  }
-  entryFactory;
-  entry(service) {
-    try {
-      return this.entryFactory(service);
-    } catch {
-      throw new MaimemoError("CREDENTIAL_STORAGE_UNAVAILABLE", "\u65E0\u6CD5\u8BBF\u95EE\u64CD\u4F5C\u7CFB\u7EDF\u5B89\u5168\u51ED\u8BC1\u5B58\u50A8\u3002");
-    }
-  }
-  get() {
-    try {
-      for (const service of readServices()) {
-        const token = this.entry(service).getPassword();
-        if (token) return token;
-      }
-      return void 0;
-    } catch {
-      throw new MaimemoError("CREDENTIAL_STORAGE_UNAVAILABLE", "\u65E0\u6CD5\u8BFB\u53D6\u64CD\u4F5C\u7CFB\u7EDF\u5B89\u5168\u51ED\u8BC1\u5B58\u50A8\u3002");
-    }
-  }
-  set(token) {
-    if (!token.trim()) throw new MaimemoError("INVALID_ARGUMENT", "\u8BBF\u95EE\u51ED\u8BC1\u4E0D\u80FD\u4E3A\u7A7A\u3002");
-    try {
-      this.entry(config2.credentialService).setPassword(token.trim());
-    } catch {
-      throw new MaimemoError("CREDENTIAL_STORAGE_UNAVAILABLE", "\u65E0\u6CD5\u5199\u5165\u64CD\u4F5C\u7CFB\u7EDF\u5B89\u5168\u51ED\u8BC1\u5B58\u50A8\u3002");
-    }
-  }
-  /**
-   * Remove the token under the current name and every legacy one, so a removed
-   * token cannot come back through an entry an earlier release wrote.
-   * @returns whether any entry was removed.
-   */
-  remove() {
-    let removed = false;
-    for (const service of readServices()) {
-      try {
-        removed = this.entry(service).deletePassword() || removed;
-      } catch {
-        if (service === config2.credentialService) {
-          throw new MaimemoError("CREDENTIAL_STORAGE_UNAVAILABLE", "\u65E0\u6CD5\u5220\u9664\u64CD\u4F5C\u7CFB\u7EDF\u5B89\u5168\u51ED\u8BC1\u3002");
-        }
-      }
-    }
-    return removed;
-  }
-  available() {
-    try {
-      this.entry(config2.credentialService);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-};
 var HOST_TOKEN_VARIABLE = "MAIMEMO_TOKEN";
 var unexpandedReference = /^\$\{[^}]*\}$/;
 var HostTokenSecretStore = class {
+  token;
   /**
-   * @param hostToken - the token the host passed, if any. Blank counts as none,
+   * @param hostToken - the token the client passed, if any. Blank counts as none,
    * and so does an unexpanded `${…}` reference to a value the user never set.
-   * @param fallback - the OS credential store.
    */
-  constructor(hostToken, fallback) {
-    this.fallback = fallback;
+  constructor(hostToken) {
     const trimmed = hostToken?.trim();
-    this.hostToken = trimmed === void 0 || trimmed === "" || unexpandedReference.test(trimmed) ? void 0 : trimmed;
+    this.token = trimmed === void 0 || trimmed === "" || unexpandedReference.test(trimmed) ? void 0 : trimmed;
   }
-  fallback;
-  hostToken;
-  /**
-   * The host's token, else the OS store's.
-   *
-   * An OS store that cannot be used counts as holding no token here: a plugin
-   * install may ship without the keyring module at all, and the useful answer
-   * then is "not configured", which points the user at the host's settings.
-   * `available()` still reports the store as unusable.
-   * @returns the token, or `undefined` when neither source has one.
-   */
   get() {
-    if (this.hostToken !== void 0) return this.hostToken;
-    try {
-      return this.fallback.get();
-    } catch (error2) {
-      if (error2 instanceof MaimemoError && error2.code === "CREDENTIAL_STORAGE_UNAVAILABLE") {
-        return void 0;
-      }
-      throw error2;
-    }
-  }
-  set(token) {
-    this.fallback.set(token);
-  }
-  remove() {
-    return this.fallback.remove();
-  }
-  available() {
-    return this.hostToken !== void 0 || this.fallback.available();
-  }
-  source() {
-    if (this.hostToken !== void 0) return "host";
-    return this.get() === void 0 ? void 0 : "keyring";
+    return this.token;
   }
 };
 
@@ -21646,10 +21495,9 @@ var Database = class {
   /**
    * Open a database file, or an in-memory database for `':memory:'`.
    * @param path - the database location.
-   * @param options - `readOnly` opens the file without write access.
    */
-  constructor(path, options = {}) {
-    this.connection = new DatabaseSync(path, { readOnly: options.readOnly === true });
+  constructor(path) {
+    this.connection = new DatabaseSync(path);
   }
   /**
    * Compile one SQL statement.
@@ -21708,6 +21556,49 @@ var Database = class {
   /** Close the connection. */
   close() {
     this.connection.close();
+  }
+};
+
+// src/errors.ts
+var MaimemoError = class extends Error {
+  constructor(code, message, retryAfterSeconds) {
+    super(message);
+    this.code = code;
+    this.retryAfterSeconds = retryAfterSeconds;
+    this.name = "MaimemoError";
+  }
+  code;
+  retryAfterSeconds;
+};
+var toMaimemoError = (error2) => {
+  if (error2 instanceof MaimemoError) return error2;
+  const code = error2?.code;
+  if (typeof code === "string" && code.startsWith("SQLITE_")) {
+    return new MaimemoError("LOCAL_STORE_UNAVAILABLE", "\u672C\u5730\u5B66\u4E60\u955C\u50CF\u8BFB\u5199\u5931\u8D25\uFF0C\u8BF7\u91CD\u8BD5\u6216\u6E05\u7406\u672C\u5730\u6570\u636E\u3002", void 0);
+  }
+  return new MaimemoError("UPSTREAM_UNAVAILABLE", "\u670D\u52A1\u6682\u65F6\u4E0D\u53EF\u7528\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002");
+};
+
+// src/config.ts
+var config2 = {
+  apiBaseUrl: "https://open.maimemo.com",
+  requestTimeoutMs: 1e4,
+  maxAttempts: 2,
+  localPageSizeMax: 50,
+  supplementBatchMax: 50,
+  upstreamCollectionMax: 1e3,
+  previewMax: 50,
+  /** Directory under the user's local app data that holds the mirror database. */
+  dataDirectoryName: "MomoLearning"
+};
+var assertPageSize = (value) => {
+  if (!Number.isInteger(value) || value < 1 || value > config2.localPageSizeMax) {
+    throw new MaimemoError("INVALID_ARGUMENT", "\u9875\u5927\u5C0F\u5FC5\u987B\u662F 1 \u5230 50 \u4E4B\u95F4\u7684\u6574\u6570\u3002");
+  }
+};
+var assertWordIds = (ids) => {
+  if (ids.length === 0 || ids.length > config2.supplementBatchMax || ids.some((id) => !id.trim())) {
+    throw new MaimemoError("INVALID_ARGUMENT", "\u5355\u8BCD\u6807\u8BC6\u6570\u91CF\u5FC5\u987B\u5728 1 \u5230 50 \u4E4B\u95F4\u3002");
   }
 };
 
@@ -21808,10 +21699,6 @@ var schema = `
       last_prompt TEXT,
       last_type TEXT,
       cleared_day TEXT
-    );
-    CREATE TABLE IF NOT EXISTS merged_source (
-      path TEXT PRIMARY KEY,
-      merged_at TEXT NOT NULL
     );
   `;
 var indexes = `
@@ -22981,22 +22868,11 @@ var registerTools = (server, db, secrets) => {
   const client = new MaimemoClient(secrets);
   server.registerTool(
     "maimemo_auth_status",
-    { description: "\u53EA\u8BFB\u672C\u673A\u5B89\u5168\u51ED\u8BC1\u72B6\u6001\u3002", inputSchema: strictObject({}) },
+    { description: "\u53EA\u8BFB\uFF1A\u5BA2\u6237\u7AEF\u662F\u5426\u4F20\u5165\u4E86\u58A8\u58A8\u8BBF\u95EE\u4EE4\u724C\u3002", inputSchema: strictObject({}) },
     async () => {
       try {
         const configured = Boolean(secrets.get());
-        return result(
-          envelope(
-            {
-              configured,
-              usable: configured,
-              credentialStoreAvailable: secrets.available(),
-              // `host` is the DeepSeek Harness credential store, `keyring` the OS one.
-              source: secrets.source?.() ?? null
-            },
-            "local_mirror"
-          )
-        );
+        return result(envelope({ configured, usable: configured }, "local_mirror"));
       } catch (error2) {
         return fail(error2);
       }
@@ -23056,7 +22932,13 @@ var registerTools = (server, db, secrets) => {
         if (words.length > config2.previewMax) warnings.push("\u5B8C\u6574\u8BCD\u8868\u8BF7\u4F7F\u7528\u672C\u5730\u5206\u9875\u5DE5\u5177\u8BFB\u53D6\u3002");
         let refresh = null;
         try {
-          refresh = await refreshStudyRecords(mirror, db, client, day, words.map((word) => word.wordId));
+          refresh = await refreshStudyRecords(
+            mirror,
+            db,
+            client,
+            day,
+            words.map((word) => word.wordId)
+          );
         } catch {
           warnings.push("\u5F53\u5929\u8BCD\u8868\u5DF2\u4FDD\u5B58\uFF0C\u4F46\u5B66\u4E60\u8BB0\u5F55\u7684\u5237\u65B0\u5931\u8D25\uFF1B\u672C\u5730\u8BB0\u5F55\u53EF\u80FD\u843D\u540E\u3002");
         }
@@ -23518,7 +23400,9 @@ var registerTools = (server, db, secrets) => {
             { day, ...outcome },
             "upstream",
             "partial",
-            outcome.mode === "catch-up" ? ["\u8DDD\u4E0A\u6B21\u8BB0\u5F55\u89C2\u6D4B\u5DF2\u6709\u6574\u65E5\u7A7A\u6863\uFF0C\u5DF2\u6574\u4F53\u91CD\u8D70\u4E00\u904D\u8BA1\u5212\uFF1B\u4E0A\u6E38\u65E2\u65E0\u6CD5\u6309\u5386\u53F2\u65E5\u671F\u53D6\u5F53\u65E5\u8BCD\u8868\uFF0C\u4E5F\u65E0\u6CD5\u7528\u65E5\u671F\u7A97\u53E3\u8986\u76D6\u7A7A\u6863\u671F\u5B66\u8FC7\u7684\u8BCD\uFF0C\u91CD\u8D70\u662F\u552F\u4E00\u80FD\u8BC1\u660E\u5B8C\u6574\u7684\u65B9\u5F0F\u3002"] : []
+            outcome.mode === "catch-up" ? [
+              "\u8DDD\u4E0A\u6B21\u8BB0\u5F55\u89C2\u6D4B\u5DF2\u6709\u6574\u65E5\u7A7A\u6863\uFF0C\u5DF2\u6574\u4F53\u91CD\u8D70\u4E00\u904D\u8BA1\u5212\uFF1B\u4E0A\u6E38\u65E2\u65E0\u6CD5\u6309\u5386\u53F2\u65E5\u671F\u53D6\u5F53\u65E5\u8BCD\u8868\uFF0C\u4E5F\u65E0\u6CD5\u7528\u65E5\u671F\u7A97\u53E3\u8986\u76D6\u7A7A\u6863\u671F\u5B66\u8FC7\u7684\u8BCD\uFF0C\u91CD\u8D70\u662F\u552F\u4E00\u80FD\u8BC1\u660E\u5B8C\u6574\u7684\u65B9\u5F0F\u3002"
+            ] : []
           )
         );
       } catch (error2) {
@@ -23652,11 +23536,7 @@ var main = async () => {
   const server = new McpServer({ name: "momo-learning-mcp", version: "0.1.0" });
   const hostToken = process.env[HOST_TOKEN_VARIABLE];
   delete process.env[HOST_TOKEN_VARIABLE];
-  registerTools(
-    server,
-    openDatabase(),
-    new HostTokenSecretStore(hostToken, new KeyringSecretStore())
-  );
+  registerTools(server, openDatabase(), new HostTokenSecretStore(hostToken));
   await server.connect(new StdioServerTransport());
   diagnostic("\u58A8\u58A8\u5B66\u4E60 MCP \u5DF2\u901A\u8FC7 stdio \u542F\u52A8\u3002");
 };

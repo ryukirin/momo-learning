@@ -178,7 +178,8 @@ const refreshStudyRecords = async (
   todayWordIds: string[]
 ): Promise<RefreshOutcome> => {
   const lastObservedAt = mirror.latestObservation();
-  const gapDays = lastObservedAt === undefined ? null : beijingDayGap(lastObservedAt, day) ?? null;
+  const gapDays =
+    lastObservedAt === undefined ? null : (beijingDayGap(lastObservedAt, day) ?? null);
   const mode: 'day' | 'catch-up' = gapDays !== null && gapDays <= 0 ? 'day' : 'catch-up';
   if (mode === 'catch-up') {
     const walk = await walkStudyRecords(mirror, db, client, {
@@ -232,32 +233,17 @@ const readUnfinished = async (client: MaimemoClient, day: string): Promise<Unfin
   return splitUnfinished(open, nextStudyDays, day);
 };
 
-export const registerTools = (
-  server: McpServer,
-  db: Database,
-  secrets: SecretStore
-): void => {
+export const registerTools = (server: McpServer, db: Database, secrets: SecretStore): void => {
   const mirror = new MirrorRepository(db);
   const todos = new TodoRepository(db);
   const client = new MaimemoClient(secrets);
   server.registerTool(
     'maimemo_auth_status',
-    { description: '只读本机安全凭证状态。', inputSchema: strictObject({}) },
+    { description: '只读：客户端是否传入了墨墨访问令牌。', inputSchema: strictObject({}) },
     async () => {
       try {
         const configured = Boolean(secrets.get());
-        return result(
-          envelope(
-            {
-              configured,
-              usable: configured,
-              credentialStoreAvailable: secrets.available(),
-              // `host` is the DeepSeek Harness credential store, `keyring` the OS one.
-              source: secrets.source?.() ?? null
-            },
-            'local_mirror'
-          )
-        );
+        return result(envelope({ configured, usable: configured }, 'local_mirror'));
       } catch (error) {
         return fail(error);
       }
@@ -325,7 +311,13 @@ export const registerTools = (
         if (words.length > config.previewMax) warnings.push('完整词表请使用本地分页工具读取。');
         let refresh: RefreshOutcome | null = null;
         try {
-          refresh = await refreshStudyRecords(mirror, db, client, day, words.map((word) => word.wordId));
+          refresh = await refreshStudyRecords(
+            mirror,
+            db,
+            client,
+            day,
+            words.map((word) => word.wordId)
+          );
         } catch {
           warnings.push('当天词表已保存，但学习记录的刷新失败；本地记录可能落后。');
         }
@@ -602,7 +594,10 @@ export const registerTools = (
       description:
         '记录本地出题中答错的词，供明天错题优先与日报使用；只写错题，不留答题流水；该词后来答对时可一并标记消除。每次调用都会给 mistakes 里每个词的累计次数加 1，同一次答错只提交一次。',
       inputSchema: strictObject({
-        day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '请使用北京时间 YYYY-MM-DD 日期。').optional(),
+        day: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, '请使用北京时间 YYYY-MM-DD 日期。')
+          .optional(),
         mistakes: z
           .array(
             strictObject({
@@ -693,8 +688,7 @@ export const registerTools = (
             ? undefined
             : (
                 db.prepare('SELECT spelling FROM mirror_word WHERE word_id=?').get(wordId) as
-                  | { spelling: string }
-                  | undefined
+                  { spelling: string } | undefined
               )?.spelling);
         if (target === undefined)
           throw new MaimemoError('INVALID_ARGUMENT', '请提供 spelling 或已存在于镜像中的 wordId。');
@@ -824,7 +818,9 @@ export const registerTools = (
             'upstream',
             'partial',
             outcome.mode === 'catch-up'
-              ? ['距上次记录观测已有整日空档，已整体重走一遍计划；上游既无法按历史日期取当日词表，也无法用日期窗口覆盖空档期学过的词，重走是唯一能证明完整的方式。']
+              ? [
+                  '距上次记录观测已有整日空档，已整体重走一遍计划；上游既无法按历史日期取当日词表，也无法用日期窗口覆盖空档期学过的词，重走是唯一能证明完整的方式。'
+                ]
               : []
           )
         );
@@ -836,13 +832,20 @@ export const registerTools = (
   server.registerTool(
     'maimemo_query_local_records',
     {
-      description: '只读本地学习记录镜像，按北京日期范围、标签和学习次数筛选，用于出题范围而不访问上游。',
+      description:
+        '只读本地学习记录镜像，按北京日期范围、标签和学习次数筛选，用于出题范围而不访问上游。',
       inputSchema: strictObject({
         dateField: z
           .enum(['last_study_date', 'first_study_date', 'next_study_date', 'add_date'])
           .default('last_study_date'),
-        start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '请使用北京时间 YYYY-MM-DD 日期。').optional(),
-        end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, '请使用北京时间 YYYY-MM-DD 日期。').optional(),
+        start: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, '请使用北京时间 YYYY-MM-DD 日期。')
+          .optional(),
+        end: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, '请使用北京时间 YYYY-MM-DD 日期。')
+          .optional(),
         tags: z.array(z.enum(['STICKING', 'WELL_FAMILIAR'])).optional(),
         minStudyCount: z.number().int().min(0).optional(),
         maxStudyCount: z.number().int().min(0).optional(),
@@ -929,9 +932,7 @@ export const registerTools = (
             // Only upstream's own total matching what the walk covered proves the
             // mirror now holds the whole plan; anything less is a verified range.
             complete ? 'complete' : 'partial',
-            complete
-              ? []
-              : ['回填未证明覆盖整个计划，本地镜像只覆盖已验证范围；可再次运行继续。']
+            complete ? [] : ['回填未证明覆盖整个计划，本地镜像只覆盖已验证范围；可再次运行继续。']
           )
         );
       } catch (error) {

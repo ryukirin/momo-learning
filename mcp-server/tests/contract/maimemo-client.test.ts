@@ -4,12 +4,7 @@ import { MaimemoClient } from '../../src/api/maimemo-client.js';
 import { MaimemoError } from '../../src/errors.js';
 import type { SecretStore } from '../../src/auth/secret-store.js';
 
-const secrets: SecretStore = {
-  get: () => 'secret-token-that-must-not-appear',
-  set: () => undefined,
-  remove: () => true,
-  available: () => true
-};
+const secrets: SecretStore = { get: () => 'secret-token-that-must-not-appear' };
 
 const clientFor = (response: Response | (() => Promise<Response>), timeoutMs = 10) =>
   new MaimemoClient(

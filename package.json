@@ -28,15 +28,10 @@
     "LICENSE"
   ],
   "scripts": {
-    "credential": "node mcp-server/dist/auth/credential-cli.js",
-    "migrate-legacy": "node mcp-server/dist/migrate-legacy.js",
     "mcp:install": "npm --prefix mcp-server install",
     "mcp:build": "npm --prefix mcp-server run build",
     "mcp:typecheck": "npm --prefix mcp-server run typecheck",
     "mcp:test": "npm --prefix mcp-server test"
-  },
-  "optionalDependencies": {
-    "@napi-rs/keyring": "^1.2.0"
   },
   "dsh": {
     "bundle": {

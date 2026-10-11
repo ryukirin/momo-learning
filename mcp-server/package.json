@@ -17,13 +17,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "start": "node dist/server.js",
-    "credential": "tsx src/auth/credential-cli.ts",
-    "migrate-legacy": "tsx src/migrate-legacy.ts",
     "probe": "tsx src/api/probe.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.1",
-    "@napi-rs/keyring": "^1.2.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {

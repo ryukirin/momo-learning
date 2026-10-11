@@ -4,12 +4,7 @@ import { MaimemoClient } from '../../src/api/maimemo-client.js';
 import { getStudyRecords } from '../../src/api/study-records.js';
 import type { SecretStore } from '../../src/auth/secret-store.js';
 
-const secrets: SecretStore = {
-  get: () => 'test-token',
-  set: () => undefined,
-  remove: () => true,
-  available: () => true
-};
+const secrets: SecretStore = { get: () => 'test-token' };
 
 test('学习记录窗口按北京时间请求数据和 as_count，不伪造远端续页', async () => {
   const bodies: Record<string, unknown>[] = [];
@@ -58,7 +53,10 @@ test('上游日期即时值在写入前归一化为北京日历日', async () =>
     ),
     new Response(JSON.stringify({ count: 1 }))
   ];
-  const client = new MaimemoClient(secrets, (async () => responses.shift() as Response) as typeof fetch);
+  const client = new MaimemoClient(
+    secrets,
+    (async () => responses.shift() as Response) as typeof fetch
+  );
   const result = await getStudyRecords(client, '2026-09-01', '2026-09-30', 1000);
   assert.deepEqual(result.records, [
     {

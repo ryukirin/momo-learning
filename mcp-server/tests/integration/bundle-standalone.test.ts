@@ -31,8 +31,10 @@ test('打包后的服务单独拷出来、旁边没有 node_modules 也能启动
     const status = (await client.callTool({ name: 'maimemo_auth_status', arguments: {} })) as {
       content: { text: string }[];
     };
-    const body = JSON.parse(status.content[0]?.text ?? '{}') as { data?: { source?: string } };
-    assert.equal(body.data?.source, 'host');
+    const body = JSON.parse(status.content[0]?.text ?? '{}') as {
+      data?: { configured?: boolean };
+    };
+    assert.equal(body.data?.configured, true);
   } finally {
     await client.close();
     rmSync(directory, { recursive: true, force: true });
