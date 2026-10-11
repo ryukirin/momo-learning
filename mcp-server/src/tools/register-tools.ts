@@ -248,7 +248,13 @@ export const registerTools = (
         const configured = Boolean(secrets.get());
         return result(
           envelope(
-            { configured, usable: configured, credentialStoreAvailable: secrets.available() },
+            {
+              configured,
+              usable: configured,
+              credentialStoreAvailable: secrets.available(),
+              // `host` is the DeepSeek Harness credential store, `keyring` the OS one.
+              source: secrets.source?.() ?? null
+            },
             'local_mirror'
           )
         );

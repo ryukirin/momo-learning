@@ -6,14 +6,16 @@
 
 ## 边界
 
-- 访问令牌只存在操作系统安全凭证存储里（Windows 上是 Credential Manager，服务名 `dsh.momo-learning-mcp`）。MCP 工具既不接收也不返回令牌。
+- 访问令牌有两个来源：宿主启动服务时通过环境变量 `MAIMEMO_TOKEN` 传入（DeepSeek Harness 从自己的凭据存储读出后传入）；没有时读操作系统安全凭证存储（Windows 上是 Credential Manager，服务名 `dsh.momo-learning-mcp`）。服务启动后立即把 `MAIMEMO_TOKEN` 从自己的环境里删掉。MCP 工具既不接收也不返回令牌，`maimemo_auth_status` 只报告令牌来源（`host` 或 `keyring`）。
 - 学习镜像与本地状态存在 `%LOCALAPPDATA%\MomoLearning\learning.sqlite`。
 - 上游只读：只调用墨墨开放 API 的读取端点，不修改账号、不写云词本、不改复习状态。
 - 不保存原始 HTTP 响应，也不保存生成的讲解与题目；凭证与请求头不进数据库。
 
 ## 与插件的衔接
 
-插件的 `cordis.patch.yml` 通过 `@deepseek-ai/dsh-mcp-client` 以 stdio 方式启动编译后的 `dist/server.js`，命令用的是运行 DSH 的那个 Node（`process.execPath`），工作目录是本目录。工具在模型侧呈现为 `mcp__maimemo__<工具名>`。
+插件的 `cordis.patch.yml` 通过 `@deepseek-ai/dsh-mcp-client` 以 stdio 方式启动编译后的 `dist/server.js`，命令用的是运行 DSH 的那个 Node（`process.execPath`），工作目录是本目录，`env` 里带着插件从凭据存储读到的 `MAIMEMO_TOKEN`。工具在模型侧呈现为 `mcp__maimemo__<工具名>`。
+
+桌面版里这个 Node 是 Electron 内置的 Node，ABI 和系统 Node 不同，所以本服务不依赖任何原生模块：SQLite 用 Node 内置的 `node:sqlite`，凭证库用的 `@napi-rs/keyring` 走 N-API，不受 ABI 影响。
 
 ## 开发
 

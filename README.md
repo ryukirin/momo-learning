@@ -18,54 +18,35 @@
 
 ## 前置条件
 
-这个插件目前只在 Windows 上能用。凭证存进 Windows Credential Manager，镜像存到 `%LOCALAPPDATA%\MomoLearning`，没有 macOS / Linux 的凭证后端。
+目前只在 Windows 上测试过。镜像存到 `%LOCALAPPDATA%\MomoLearning`。
 
-- Node.js `>=24.13.1 <25`。Harness 跑在哪个 Node 上，MCP 服务就用哪个 Node 启动。
-- DeepSeek Harness 本身。没装的话 `npx @deepseek-ai/dsh web` 就能起来，从源码安装和 profile 的说明在[官方仓库](https://github.com/deepseek-ai/deepseek-harness)。
+- DeepSeek Harness 桌面版 0.2 及以上。桌面版自带运行时，MCP 服务用的就是这个运行时，不用另外装 Node.js。
 - 一个墨墨开放平台的只读凭证。墨墨背单词 App 里「我的 → 更多设置 → 实验功能 → 开放 API」能拿到，也可以去 <https://open.maimemo.com/open/api/v1/tokens/openapi> 申请。有频控，别外传。
 
 ## 安装
 
-先装 MCP 服务的依赖。`git clone` 下来的 `mcp-server/node_modules` 是空的，不装的话 MCP 起不来，工具列表里也就不会有 `mcp__maimemo__*`：
+源码版（`npx @deepseek-ai/dsh web` 或从源码运行）仍在维护，但界面会变化，这里只介绍当前桌面版的安装方式。
 
-```sh
-cd dsh-momo-learning
-npm run mcp:install
+在桌面版里打开「插件」→「添加插件」，输入下面任意一种：
+
+- GitHub 仓库地址：`https://github.com/ryukirin/dsh-momo-learning`
+- 本地目录路径：克隆到本机的仓库目录。这种方式会直接链接该目录，不会替你装依赖，添加之前先在仓库根目录跑一次 `npm install`
+
+插件的依赖都声明在根目录的 `package.json` 里，`mcp-server/dist` 是编译好的、随仓库提交，装完不需要构建。
+
+### 配置墨墨凭证
+
+令牌放在 DeepSeek Harness 自己的凭据文件里：`~/.dsh/.credentials.yaml`（Windows 上是 `%USERPROFILE%\.dsh\.credentials.yaml`；设置了 `DSH_HOME` 时在 `$DSH_HOME` 下）。在 `refs` 下加一行 `MAIMEMO_TOKEN`：
+
+```yaml
+version: 1
+refs:
+  MAIMEMO_TOKEN: <你的令牌>
 ```
 
-`mcp-server/dist` 是编译好的，随仓库一起提交，不用构建。
+文件里已有别的条目时只加这一行，其他内容不动。也可以写进同目录的 `.env`：`MAIMEMO_TOKEN=<你的令牌>`。
 
-然后把它装进一个 profile：
-
-```sh
-dsh plugin --profile <profile> add ./dsh-momo-learning
-```
-
-`dsh plugin` 会初始化 profile（第一个 bundle 是 `@deepseek-ai/dsh-base`），用 pnpm 把本目录链接进去。因为这个包声明了 `dsh.bundle`，它同时会被追加到 `dsh.profile.bundles`。本包没有运行时依赖，这一步不联网。
-
-配墨墨凭证。令牌不能写在配置文件里，只能通过交互式命令存进系统凭证库：
-
-```sh
-cd dsh-momo-learning
-npm run credential -- set      # 交互式输入
-npm run credential -- status
-npm run credential -- remove
-```
-
-存进去之后条目名是 `dsh.momo-learning-mcp`。
-
-启动前先确认 patch 层合成进去了：
-
-```sh
-dsh --profile <profile> --dump-config   # 应该能看到 momo-learning 和 momo-learning-mcp 两行
-dsh --profile <profile>
-```
-
-不想常驻也可以用一次性 overlay，但包本身还是得先 `dsh plugin add`，不然行里的包名解析不到：
-
-```sh
-dsh --profile <profile> --patch ./dsh-momo-learning/cordis.patch.yml
-```
+插件在 Harness 启动时读取 `MAIMEMO_TOKEN`，通过环境变量交给 MCP 服务，所以配好或改了令牌之后要重启桌面版。没有配 `MAIMEMO_TOKEN` 时，MCP 服务改读 Windows 凭据管理器里的 `dsh.momo-learning-mcp` 条目，源码版用 `npm run credential -- set` 写入的就是这个条目。
 
 ### 从旧版本升级
 
@@ -181,9 +162,9 @@ maimemo_list_quiz_candidates({ limit: 20 })
 
 ## 出问题
 
-**工具列表里没有 `mcp__maimemo__*`**：多半是没跑 `npm run mcp:install`。再不然看看启动日志里有没有「墨墨学习 MCP 已通过 stdio 启动。」这一行。
+**工具列表里没有 `mcp__maimemo__*`**：MCP 服务只在 Harness 启动时连接，装完插件后要重启桌面版。重启后还没有的话，看「插件」页里 `dsh-momo-learning` 有没有报错，再看启动日志里有没有「墨墨学习 MCP 已通过 stdio 启动。」这一行。
 
-**`maimemo_auth_status` 返回 `configured: false`**：凭证没配，跑 `npm run credential -- set`。
+**`maimemo_auth_status` 返回 `configured: false`**：两个来源都没有令牌。按「配置墨墨凭证」加上 `MAIMEMO_TOKEN` 后重启。返回里的 `source` 是令牌的来源：`host` 表示来自 Harness 的凭据文件，`keyring` 表示来自 Windows 凭据管理器。
 
 **同步回来 0 个词**：确认凭证对应的是平时使用的墨墨账号，并且 App 里开启了「自动同步」。
 
@@ -191,7 +172,7 @@ maimemo_list_quiz_candidates({ limit: 20 })
 
 **App 里已复习完，仍提示先回 App**：判断只看当天到期的词。`maimemo_get_day_state` 返回的 `unfinished.due` 列出了未完成的词，可以和 App 对照。
 
-**`--dump-config` 看不到两行**：profile 没装上，或者包路径不对。看 `$DSH_HOME/profiles/<profile>/package.json` 里 `dsh.profile.bundles` 有没有 `dsh-momo-learning`。
+**「添加插件」装不上**：插件页会显示安装日志。用 GitHub 地址安装需要本机能连上 GitHub；连不上时可以先把仓库克隆到本机，按本地目录安装。
 
 **改了 `SKILL.md` 不生效**：Skill 正文是插件加载时读的，得重启 Harness。
 
@@ -208,14 +189,26 @@ npm run mcp:test
 
 改完 `mcp-server/src/` 记得 `npm run mcp:build`。插件跑的是 `dist/`，而 `dist/` 是随仓库提交的，不重建等于没改。这一层的更多细节在 [`mcp-server/README.md`](mcp-server/README.md)。
 
+MCP 服务的运行时依赖在根目录和 `mcp-server/package.json` 里各声明一份：桌面版装插件时只装根目录的依赖，开发和测试用 `mcp-server` 里的。两份必须一致，`npm run mcp:test` 会检查。服务不用原生模块，SQLite 用的是 Node 内置的 `node:sqlite`，所以桌面版内置的 Node 和系统 Node 都能直接运行。
+
+自检脚本 `verify.mjs` 会按 launcher 的方式合成 `dsh-base` 各层加本 bundle 层，真的启动一次，然后断言 Skill 和 19 个工具都在。它依赖 profile 里能解析到 `@deepseek-ai/dsh-app-boot`，用源码版的 profile 运行：
+
+```sh
+cp <bundle>/verify.mjs "$DSH_HOME/profiles/<profile>/"
+cd "$DSH_HOME/profiles/<profile>"
+node verify.mjs
+```
+
+通过打印 `PASS`，缺东西就逐条列出来，并以退出码 1 结束。
+
 ## 目录
 
-这是个 bundle。`package.json` 里声明了 `dsh.bundle.patch`，所以 `dsh plugin --profile <n> add <本包>` 会把它作为一层 patch 挂进 profile；它内部再提供插件行——`index.js` 导出 `apply`，`cordis.patch.yml` 把它挂起来。DSH 里 bundle 和 plugin 不是一回事：bundle 是能装进 profile 的一层，plugin 是被 `cordis.yml` 挂载的一行。
+这是个 bundle。`package.json` 里声明了 `dsh.bundle.patch`，所以桌面版「添加插件」或 `dsh plugin --profile <n> add <本包>` 会把它作为一层 patch 挂进 profile；它内部再提供插件行——`index.js` 导出 `apply`，`cordis.patch.yml` 把它挂起来。DSH 里 bundle 和 plugin 不是一回事：bundle 是能装进 profile 的一层，plugin 是被 `cordis.yml` 挂载的一行。
 
 | 路径 | 作用 |
 |---|---|
 | `cordis.patch.yml` | 这个 bundle 的 patch 层：插入本包的插件行，以及一行指向本包 MCP 服务的 `@deepseek-ai/dsh-mcp-client` |
-| `index.js` | 插件本体：注册 `momo-daily-learning` Skill，并把本包路径作为 `momoLearningPaths` 服务发布出去 |
+| `index.js` | 插件本体：注册 `momo-daily-learning` Skill，从凭据存储读取 `MAIMEMO_TOKEN`，把本包路径和要交给 MCP 服务的环境变量作为 `momoLearningPaths` 服务发布出去 |
 | `skills/momo-daily-learning/SKILL.md` | Skill 原文 |
 | `mcp-server/` | MCP 服务本体，独立的 TypeScript 子项目，自带 `package.json`、测试和 README |
 | `verify.mjs` | 自检脚本 |
@@ -234,30 +227,18 @@ npm run mcp:test
 
 MCP 客户端在插件激活时就完成首次连接和工具发现，所以 3、4 两步在 Harness 起来之后就能用。
 
-不想开会话也可以跑自检脚本。它会按 launcher 的方式合成 `dsh-base` 各层加本 bundle 层，真的启动一次，然后断言 Skill 和 19 个工具都在：
-
-```sh
-cp <bundle>/verify.mjs "$DSH_HOME/profiles/<profile>/"
-cd "$DSH_HOME/profiles/<profile>"
-node verify.mjs
-```
-
-通过打印 `PASS`，缺东西就逐条列出来，并以退出码 1 结束。
-
 ## 卸载
 
-```sh
-dsh plugin --profile <profile> remove dsh-momo-learning
-```
-
-依赖和 patch 层都会移除。镜像数据和凭证不会被删。要清镜像数据用 MCP 工具 `maimemo_clear_local_learning_data(confirm: true)`。
+在「插件」页移除 `dsh-momo-learning`，依赖和 patch 层都会移除。镜像数据和凭证不会被删：要清镜像数据，移除前先调用 MCP 工具 `maimemo_clear_local_learning_data(confirm: true)`；凭证在 `.credentials.yaml` 里删掉 `MAIMEMO_TOKEN` 那一行。
 
 ## 已知限制
 
 - 不支持写墨墨账号，加词、改复习状态、云词本都没有工具
 - `maimemo_sync_word_supplements` 在探针没确认用户自建内容端点前固定返回 `UNSUPPORTED_CAPABILITY`
 - 改 `SKILL.md` 要重启 Harness 才生效
-- 插件声明了 `inject: ['skills']`，组合里得有 `@deepseek-ai/dsh-skill`（`dsh-base` 已经挂了）。精简组合缺它的话这一行会停在待激活
+- 插件声明了 `inject: ['skills', 'credentials']`，组合里得有 Skill 注册表和凭据存储（`dsh-base` 都已经挂了）。精简组合缺其中之一的话这一行会停在待激活
+- 令牌在 Harness 启动时读取，改了 `MAIMEMO_TOKEN` 要重启才生效
+- Harness 的凭据文件只有当前系统用户能读，但同一用户下运行的其他进程（包括 agent 调用的工具）也能读到
 - MCP 服务要能 spawn 带管道的子进程。把 stdio 管道禁掉的受限沙箱里工具会连不上，正常启动的 Harness 没这个问题
 - 逐题弹窗依赖 `ask_user_question`，没有 UI 的会话会退化成一次一题的普通消息提问
 - 部分词墨墨不返回拼写，这些词无法出题，会被跳过
@@ -273,7 +254,7 @@ dsh plugin --profile <profile> remove dsh-momo-learning
 
 题目、解析、例句和日报都是模型生成的，不是墨墨账号原文。墨墨开放接口只给词 id、拼写、作答结果和学习记录，没有释义、例句和词书信息。
 
-访问凭证只存在你本机的系统凭证库里，项目不上传、不转发、不记录。学习数据也只留在本机镜像文件里。
+访问凭证只存在你本机：Harness 的凭据文件或 Windows 凭据管理器。项目不上传、不转发、不记录。学习数据也只留在本机镜像文件里。
 
 ## License
 

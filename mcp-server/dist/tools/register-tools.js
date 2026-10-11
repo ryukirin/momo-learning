@@ -168,7 +168,13 @@ export const registerTools = (server, db, secrets) => {
     server.registerTool('maimemo_auth_status', { description: '只读本机安全凭证状态。', inputSchema: strictObject({}) }, async () => {
         try {
             const configured = Boolean(secrets.get());
-            return result(envelope({ configured, usable: configured, credentialStoreAvailable: secrets.available() }, 'local_mirror'));
+            return result(envelope({
+                configured,
+                usable: configured,
+                credentialStoreAvailable: secrets.available(),
+                // `host` is the DeepSeek Harness credential store, `keyring` the OS one.
+                source: secrets.source?.() ?? null
+            }, 'local_mirror'));
         }
         catch (error) {
             return fail(error);

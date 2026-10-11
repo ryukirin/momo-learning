@@ -30,6 +30,9 @@
         args:
           - !!js ctx.momoLearningPaths.serverScript
         cwd: !!js ctx.momoLearningPaths.serverDir
+        # MAIMEMO_TOKEN from the harness credential store, when one is stored;
+        # otherwise empty, and the server reads the OS credential store.
+        env: !!js ctx.momoLearningPaths.env
         # The mirror's slowest tools walk a paged upstream API with a 10s
         # per-request timeout and two attempts; the 60s bridge default is kept
         # explicit so a raised per-request timeout has room above it.
