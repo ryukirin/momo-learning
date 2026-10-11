@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import Database from 'better-sqlite3';
+import Database from '../../src/db/sqlite.js';
 import { migrate } from '../../src/db/migrations.js';
 import { removeDatabaseSidecars } from '../../src/db/local-data-clearer.js';
 

@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import Database from 'better-sqlite3';
+import Database from './sqlite.js';
 import { config } from '../config.js';
 import { migrate } from './migrations.js';
 
@@ -10,7 +10,7 @@ export const defaultDatabasePath = (): string => {
   return join(root, config.dataDirectoryName, 'learning.sqlite');
 };
 
-export const openDatabase = (path = defaultDatabasePath()): Database.Database => {
+export const openDatabase = (path = defaultDatabasePath()): Database => {
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
   migrate(db);

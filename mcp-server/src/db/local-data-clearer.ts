@@ -1,7 +1,7 @@
 import { existsSync, rmSync } from 'node:fs';
-import Database from 'better-sqlite3';
+import Database from './sqlite.js';
 
-export const clearLocalLearningData = (db: Database.Database): { deletedRows: number } => {
+export const clearLocalLearningData = (db: Database): { deletedRows: number } => {
   const tables = [
     'todo_entry',
     'todo_session',

@@ -1,7 +1,7 @@
-import Database from 'better-sqlite3';
+import Database from './sqlite.js';
 export declare class TodoRepository {
     private readonly db;
-    constructor(db: Database.Database);
+    constructor(db: Database);
     /**
      * Return whether an active session for the day still serves the caller.
      *

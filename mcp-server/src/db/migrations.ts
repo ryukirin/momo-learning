@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database from './sqlite.js';
 
 /**
  * Local mirror schema version recorded in `schema_migration` after a successful
@@ -142,7 +142,7 @@ const orderConstraintRebuilds = [
 ] as const;
 
 /** Column names of one stored table, or an empty list when it does not exist. */
-const tableColumns = (db: Database.Database, table: string): string[] => {
+const tableColumns = (db: Database, table: string): string[] => {
   const exists = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
     .get(table) as { name?: string } | undefined;
@@ -150,7 +150,7 @@ const tableColumns = (db: Database.Database, table: string): string[] => {
   return (db.pragma(`table_info(${table})`) as { name: string }[]).map((column) => column.name);
 };
 
-const storedTableSql = (db: Database.Database, table: string): string => {
+const storedTableSql = (db: Database, table: string): string => {
   const row = db
     .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?")
     .get(table) as { sql?: string } | undefined;
@@ -168,12 +168,12 @@ const storedTableSql = (db: Database.Database, table: string): string => {
  * @param table - table to inspect.
  * @returns whether the stored DDL still contains that constraint.
  */
-const hasUniqueUpstreamOrder = (db: Database.Database, table: string): boolean =>
+const hasUniqueUpstreamOrder = (db: Database, table: string): boolean =>
   /UNIQUE\s*\([^)]*upstream_order[^)]*\)/i.test(storedTableSql(db, table));
 
 /** Recreate one table without its version-1 `upstream_order` uniqueness rule, keeping every row. */
 const rebuildWithoutUniqueUpstreamOrder = (
-  db: Database.Database,
+  db: Database,
   table: string,
   columns: string
 ): void => {
@@ -204,7 +204,7 @@ const rebuildWithoutUniqueUpstreamOrder = (
  * `study_window_member`, so an existing mirror keeps its ability to mark a word
  * as no longer planned.
  */
-const collapseStudyRecordToPerWord = (db: Database.Database): void => {
+const collapseStudyRecordToPerWord = (db: Database): void => {
   if (!tableColumns(db, 'study_record').includes('sync_id')) return;
   db.pragma('foreign_keys = OFF');
   try {
@@ -248,7 +248,7 @@ const collapseStudyRecordToPerWord = (db: Database.Database): void => {
  * A nullable column appended by `ALTER TABLE` sits in the same position the
  * current DDL gives it, so existing positional inserts keep working unchanged.
  */
-const addTodayResponseColumn = (db: Database.Database): void => {
+const addTodayResponseColumn = (db: Database): void => {
   if (tableColumns(db, 'today_item').includes('first_response')) return;
   db.exec('ALTER TABLE today_item ADD COLUMN first_response TEXT');
 };
@@ -275,7 +275,7 @@ const beijingDayOfSync = (alias = ''): string => `date(${alias}finished_at, '+8 
  * `substr(value, 1, 10)` name the previous day. The conversion is idempotent for
  * values that are already calendar days, so re-running it changes nothing.
  */
-const normalizeStoredDatesToBeijingDays = (db: Database.Database): void => {
+const normalizeStoredDatesToBeijingDays = (db: Database): void => {
   for (const column of studyDateColumns) {
     // `date()` returns NULL for an unparseable value, so the guard keeps such a
     // value as it was instead of erasing it.
@@ -304,7 +304,7 @@ const normalizeStoredDatesToBeijingDays = (db: Database.Database): void => {
   ).run();
 };
 
-export const migrate = (db: Database.Database): void => {
+export const migrate = (db: Database): void => {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('busy_timeout = 3000');

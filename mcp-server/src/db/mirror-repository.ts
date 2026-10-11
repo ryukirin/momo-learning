@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import Database from 'better-sqlite3';
+import Database from './sqlite.js';
 import { config } from '../config.js';
 import type { Completeness } from '../tools/tool-envelope.js';
 
@@ -58,7 +58,7 @@ export interface StudyRecordQuery {
 }
 
 export class MirrorRepository {
-  constructor(private readonly db: Database.Database) {}
+  constructor(private readonly db: Database) {}
 
   /**
    * Save one day's upstream today-list as a snapshot.

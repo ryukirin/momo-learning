@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type Database from '../db/sqlite.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { SecretStore } from '../auth/secret-store.js';
@@ -81,7 +81,7 @@ interface RefreshOutcome {
  */
 const walkStudyRecords = async (
   mirror: MirrorRepository,
-  db: Database.Database,
+  db: Database,
   client: MaimemoClient,
   options: { pageSize: number; maxPages: number }
 ): Promise<WalkOutcome> => {
@@ -172,7 +172,7 @@ const walkStudyRecords = async (
  */
 const refreshStudyRecords = async (
   mirror: MirrorRepository,
-  db: Database.Database,
+  db: Database,
   client: MaimemoClient,
   day: string,
   todayWordIds: string[]
@@ -234,7 +234,7 @@ const readUnfinished = async (client: MaimemoClient, day: string): Promise<Unfin
 
 export const registerTools = (
   server: McpServer,
-  db: Database.Database,
+  db: Database,
   secrets: SecretStore
 ): void => {
   const mirror = new MirrorRepository(db);

@@ -1,3 +1,3 @@
-import Database from 'better-sqlite3';
+import Database from './sqlite.js';
 export declare const defaultDatabasePath: () => string;
-export declare const openDatabase: (path?: string) => Database.Database;
+export declare const openDatabase: (path?: string) => Database;

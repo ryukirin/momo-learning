@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database from './sqlite.js';
 import type { Completeness } from '../tools/tool-envelope.js';
 export interface WordFact {
     wordId: string;
@@ -40,7 +40,7 @@ export interface StudyRecordQuery {
 }
 export declare class MirrorRepository {
     private readonly db;
-    constructor(db: Database.Database);
+    constructor(db: Database);
     /**
      * Save one day's upstream today-list as a snapshot.
      * @param words - the day's items, in upstream order.

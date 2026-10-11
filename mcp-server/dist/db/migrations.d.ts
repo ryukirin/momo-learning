@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import Database from './sqlite.js';
 /**
  * Local mirror schema version recorded in `schema_migration` after a successful
  * migration.
@@ -15,4 +15,4 @@ import Database from 'better-sqlite3';
  *   per word ever answered wrong, never a per-attempt transcript.
  */
 export declare const schemaVersion = 6;
-export declare const migrate: (db: Database.Database) => void;
+export declare const migrate: (db: Database) => void;

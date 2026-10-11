@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import Database from 'better-sqlite3';
+import Database from './sqlite.js';
 import { MaimemoError } from '../errors.js';
 
 export class TodoRepository {
-  constructor(private readonly db: Database.Database) {}
+  constructor(private readonly db: Database) {}
 
   /**
    * Return whether an active session for the day still serves the caller.

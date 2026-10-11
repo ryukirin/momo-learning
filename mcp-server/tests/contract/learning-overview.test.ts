@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import Database from 'better-sqlite3';
+import Database from '../../src/db/sqlite.js';
 import { migrate } from '../../src/db/migrations.js';
 import { MirrorRepository } from '../../src/db/mirror-repository.js';
 
