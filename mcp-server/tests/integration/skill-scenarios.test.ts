@@ -114,9 +114,35 @@ test('开场覆盖全部分支：未学完就停，进度未知要先确认，�
   // An unfinished day has no answers yet, so syncing it would save a partial snapshot.
   assert.match(skill, /也不要继续同步/);
   assert.match(skill, /reason: "start_daily_todo"/);
-  assert.match(skill, /CREDENTIAL_MISSING/);
+  assert.match(skill, /AUTH_NOT_CONFIGURED/);
   assert.match(skill, /不得在对话里索要或接收令牌/);
-  assert.match(skill, /RATE_LIMITED/);
+  assert.match(skill, /UPSTREAM_RATE_LIMITED/);
+});
+
+test('skill 列出的错误代码都是服务实际会返回的', () => {
+  // A code the server never returns leaves the model with no matching row, so
+  // the error table is checked against the server's own list.
+  const errors = readFileSync(resolve(process.cwd(), 'src/errors.ts'), 'utf8');
+  const known = new Set([...errors.matchAll(/'([A-Z_]+)'/g)].map((match) => match[1]));
+  const section = skill.slice(skill.indexOf('### 工具报错'), skill.indexOf('## 出题'));
+  // Only the table's first column holds codes; the second may name other identifiers.
+  const firstColumns = section
+    .split('\n')
+    .filter((line) => line.startsWith('| `'))
+    .map((line) => line.split('|')[1] ?? '');
+  const listed = firstColumns.flatMap((cell) =>
+    [...cell.matchAll(/`([A-Z][A-Z_]{3,})`/g)].map((match) => match[1])
+  );
+  assert.ok(listed.length >= 5);
+  for (const code of listed) assert.ok(known.has(code), `skill 里的 ${code} 不在 ErrorCode 里`);
+});
+
+test('skill 对两个客户端都适用', () => {
+  // One skill file serves both clients, so it names both popup tools and never
+  // a single client's install location.
+  assert.match(skill, /AskUserQuestion/);
+  assert.match(skill, /DeepSeek Harness 是 `write`，Claude Code 是 `Write`/);
+  assert.doesNotMatch(skill, /dsh-momo-learning/);
 });
 
 test('同一次答错只提交一次，避免累计次数翻倍', () => {

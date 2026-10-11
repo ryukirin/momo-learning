@@ -1,7 +1,7 @@
 {
-  "name": "dsh-momo-learning",
-  "version": "0.1.0",
-  "description": "DeepSeek Harness plugin bundle: the 墨墨学习 mirror MCP server (mcp__maimemo__*) plus the momo-daily-learning skill",
+  "name": "momo-learning",
+  "version": "0.2.0",
+  "description": "墨墨背单词的本地学习镜像（MCP 服务）和每日出题 Skill，可作为 DeepSeek Harness 或 Claude Code 插件安装",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -12,12 +12,14 @@
     "./package.json": "./package.json"
   },
   "files": [
+    ".claude-plugin",
     "index.js",
     "cordis.patch.yml",
     "verify.mjs",
     "skills",
-    "mcp-server/src",
     "mcp-server/dist",
+    "mcp-server/src",
+    "mcp-server/scripts",
     "mcp-server/tests",
     "mcp-server/package.json",
     "mcp-server/tsconfig.json",
@@ -33,10 +35,8 @@
     "mcp:typecheck": "npm --prefix mcp-server run typecheck",
     "mcp:test": "npm --prefix mcp-server test"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.1",
-    "@napi-rs/keyring": "^1.2.0",
-    "zod": "^3.24.4"
+  "optionalDependencies": {
+    "@napi-rs/keyring": "^1.2.0"
   },
   "dsh": {
     "bundle": {
@@ -46,14 +46,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/<your-account>/dsh-momo-learning.git"
+    "url": "git+https://github.com/ryukirin/momo-learning.git"
   },
   "keywords": [
-    "dsh-plugin",
-    "deepseek-harness",
+    "maimemo",
     "mcp",
     "model-context-protocol",
-    "maimemo",
     "spaced-repetition"
   ]
 }

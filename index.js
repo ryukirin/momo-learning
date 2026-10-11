@@ -1,5 +1,5 @@
 /**
- * dsh-momo-learning — one DeepSeek Harness plugin that carries the 墨墨学习
+ * momo-learning — the DeepSeek Harness plugin entry that carries the 墨墨学习
  * learning mirror: the `momo-daily-learning` skill for the model, and the
  * resolved paths the sibling `cordis.patch.yml` row needs to launch the bundled
  * MCP server.

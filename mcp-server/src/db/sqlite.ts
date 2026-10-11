@@ -54,9 +54,10 @@ export default class Database {
   /**
    * Open a database file, or an in-memory database for `':memory:'`.
    * @param path - the database location.
+   * @param options - `readOnly` opens the file without write access.
    */
-  constructor(path: string) {
-    this.connection = new DatabaseSync(path);
+  constructor(path: string, options: { readOnly?: boolean } = {}) {
+    this.connection = new DatabaseSync(path, { readOnly: options.readOnly === true });
   }
 
   /**

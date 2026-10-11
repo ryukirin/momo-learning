@@ -8,10 +8,14 @@ export const config = {
   supplementBatchMax: 50,
   upstreamCollectionMax: 1_000,
   previewMax: 50,
-  credentialService: 'dsh.momo-learning-mcp',
+  credentialService: 'momo-learning-mcp',
+  /** Service names earlier releases stored the token under; read after the current one. */
+  legacyCredentialServices: ['dsh.momo-learning-mcp', 'codex.maimemo-learning-mcp'],
   credentialAccount: 'default',
   /** Directory under the user's local app data that holds the mirror database. */
-  dataDirectoryName: 'MomoLearning'
+  dataDirectoryName: 'MomoLearning',
+  /** Directories earlier releases kept the mirror database in. */
+  legacyDataDirectoryNames: ['CodexMomoLearning']
 } as const;
 
 export const assertPageSize = (value: number): void => {

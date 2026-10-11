@@ -1,0 +1,12 @@
+{
+  "name": "momo-learning",
+  "owner": { "name": "ryukirin" },
+  "description": "墨墨背单词学习插件",
+  "plugins": [
+    {
+      "name": "momo-learning",
+      "source": "./",
+      "description": "墨墨背单词的本地学习镜像（MCP 服务）和每日出题 Skill"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-# dsh-momo-learning — the 墨墨学习 mirror (MCP server) plus its daily-learning
+# momo-learning — the 墨墨学习 mirror (MCP server) plus its daily-learning
 # skill, as one installable DeepSeek Harness bundle layer.
 #
 # Both rows are additive: this layer owns them, so no row from `dsh-base` or any
@@ -16,7 +16,7 @@
     # The package's own plugin: registers the `momo-daily-learning` skill and
     # publishes `momoLearningPaths` for the MCP row below.
     - id: momo-learning
-      name: 'dsh-momo-learning'
+      name: 'momo-learning'
 
     # Generic MCP bridge pointed at the bundled stdio server. Its tools appear
     # to the model as `mcp__maimemo__<tool>`.

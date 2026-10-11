@@ -1,0 +1,25 @@
+{
+  "name": "momo-learning",
+  "displayName": "墨墨学习",
+  "version": "0.2.0",
+  "description": "墨墨背单词的本地学习镜像（MCP 服务）和每日出题 Skill",
+  "author": { "name": "ryukirin" },
+  "repository": "https://github.com/ryukirin/momo-learning",
+  "license": "MIT",
+  "keywords": ["maimemo", "mcp", "spaced-repetition"],
+  "mcpServers": {
+    "maimemo": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/server.js"],
+      "env": { "MAIMEMO_TOKEN": "${user_config.maimemo_token}" }
+    }
+  },
+  "userConfig": {
+    "maimemo_token": {
+      "type": "string",
+      "title": "墨墨开放 API 令牌",
+      "description": "在墨墨背单词 App「我的 → 更多设置 → 实验功能 → 开放 API」获取。留空时读取系统凭据管理器里用 npm run credential -- set 保存的令牌。",
+      "sensitive": true
+    }
+  }
+}

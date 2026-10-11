@@ -1,28 +1,22 @@
 /**
- * One-shot migration from the names this mirror carried before it was published
- * as a DeepSeek Harness plugin.
+ * Bring data from the locations earlier releases used into the current one.
  *
- * Two things were renamed: the OS credential-store service and the local app-data
- * directory. Both are *locations*, not contents, so nothing here rewrites data —
- * it moves the database beside its sidecars and copies the stored credential from
- * the old keyring entry to the new one. Upstream can rebuild the plan mirror in a
- * single call, but the mistake book and past daily snapshots exist only locally,
- * which is why the database is moved rather than recreated.
+ * Earlier releases kept the mirror database under a client-specific directory.
+ * When the current location has no database yet, the old one is moved over with
+ * its sidecars. When both exist — two clients each kept their own — the old
+ * mistake book is merged into the current database, because it exists only
+ * locally; the plan mirror needs no merging, since upstream can rebuild it. The
+ * old database is left in place either way a merge happened.
  *
- * The credential copy is an operation on the secret store, so it follows the same
- * rule as the credential CLI: it needs an interactive terminal, or an explicit
- * `--yes` in a non-interactive one.
+ * Credentials need no step: the server reads the current service name first and
+ * then every name an earlier release used.
  */
 import { existsSync, mkdirSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { Entry } from '@napi-rs/keyring';
 import { config } from './config.js';
-
-/** The names this project used before the rename. */
-const legacy = {
-  credentialService: 'codex.maimemo-learning-mcp',
-  dataDirectoryName: 'CodexMomoLearning'
-} as const;
+import { openDatabase } from './db/database.js';
+import { mergeQuizMistakes } from './db/merge-mistakes.js';
+import Database from './db/sqlite.js';
 
 const localRoot = (): string =>
   process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? process.cwd(), 'AppData', 'Local');
@@ -30,60 +24,53 @@ const localRoot = (): string =>
 /** Sidecars SQLite keeps beside a WAL database; moving the database alone would lose committed pages. */
 const sidecarSuffixes = ['', '-wal', '-shm'] as const;
 
-const migrateDatabase = (): string => {
+/**
+ * Move or merge one legacy database into the current location.
+ * @param legacyDirectory - the directory name an earlier release used.
+ * @returns a one-line report.
+ */
+const migrateDatabase = (legacyDirectory: string): string => {
   const root = localRoot();
   const target = join(root, config.dataDirectoryName, 'learning.sqlite');
-  const source = join(root, legacy.dataDirectoryName, 'learning.sqlite');
-  if (!existsSync(source)) return `数据库：旧位置没有文件，无需迁移（${source}）`;
-  if (existsSync(target)) return `数据库：新位置已有文件，保留不改（${target}）`;
-  mkdirSync(dirname(target), { recursive: true });
-  let moved = 0;
-  for (const suffix of sidecarSuffixes) {
-    const from = `${source}${suffix}`;
-    if (!existsSync(from)) continue;
-    renameSync(from, `${target}${suffix}`);
-    moved += 1;
-  }
-  return `数据库：已把 ${moved} 个文件从 ${dirname(source)} 移到 ${dirname(target)}`;
-};
-
-const migrateCredential = (allowed: boolean): string => {
-  const read = (service: string): string | undefined => {
-    try {
-      return new Entry(service, config.credentialAccount).getPassword() ?? undefined;
-    } catch {
-      return undefined;
+  const source = join(root, legacyDirectory, 'learning.sqlite');
+  if (!existsSync(source)) return `数据库：${legacyDirectory} 下没有旧数据库，跳过。`;
+  if (!existsSync(target)) {
+    mkdirSync(dirname(target), { recursive: true });
+    let moved = 0;
+    for (const suffix of sidecarSuffixes) {
+      const from = `${source}${suffix}`;
+      if (!existsSync(from)) continue;
+      renameSync(from, `${target}${suffix}`);
+      moved += 1;
     }
-  };
-  const legacyToken = read(legacy.credentialService);
-  if (legacyToken === undefined) return '凭证：旧服务名下没有凭证，无需迁移。';
-  if (read(config.credentialService) !== undefined) {
-    return `凭证：新服务名 ${config.credentialService} 下已有凭证，保留不改；旧凭证仍在，可在确认后自行删除。`;
+    return `数据库：已把 ${moved} 个文件从 ${dirname(source)} 移到 ${dirname(target)}。`;
   }
-  if (!allowed) {
-    return '凭证：检测到旧服务名下的凭证，但当前不是交互式终端。请重新运行时加上 --yes 以复制凭证。';
+  const into = openDatabase(target);
+  const from = new Database(source, { readOnly: true });
+  try {
+    const outcome = mergeQuizMistakes(into, from, source);
+    if (outcome.alreadyMerged) return `错题本：${source} 之前已经合并过，这次没有改动。`;
+    return `错题本：已把 ${source} 合并进 ${target}，新增 ${outcome.added} 个词，合并 ${outcome.combined} 个两边都有的词（累计次数相加）。旧数据库保留在原位，确认无误后可以删除。`;
+  } finally {
+    from.close();
+    into.close();
   }
-  new Entry(config.credentialService, config.credentialAccount).setPassword(legacyToken);
-  return `凭证：已从 ${legacy.credentialService} 复制到 ${config.credentialService}；旧条目仍在，确认无误后可自行删除。`;
 };
 
 const run = (): void => {
-  const allowed = process.stdin.isTTY || process.argv.includes('--yes');
-  // Each step is independent and reported on its own: a running DSH host keeps the
-  // database open, which makes the move fail on Windows, and that must not stop the
-  // credential from being copied.
-  try {
-    process.stdout.write(`${migrateDatabase()}\n`);
-  } catch (error) {
-    process.stdout.write(`数据库：迁移失败（${String(error)}）\n`);
-    process.stdout.write('  多半是 DSH 还在运行、MCP 子进程占着数据库文件。请先停掉 DSH 再重跑本命令。\n');
+  for (const legacyDirectory of config.legacyDataDirectoryNames) {
+    try {
+      process.stdout.write(`${migrateDatabase(legacyDirectory)}\n`);
+    } catch (error) {
+      process.stdout.write(`数据库：迁移失败（${String(error)}）\n`);
+      process.stdout.write(
+        '  多半是 MCP 服务还在运行、占着数据库文件。请先关掉用它的客户端再重跑本命令。\n'
+      );
+    }
   }
-  try {
-    process.stdout.write(`${migrateCredential(allowed)}\n`);
-  } catch (error) {
-    process.stdout.write(`凭证：迁移失败（${String(error)}）\n`);
-  }
-  process.stdout.write('提示：迁移只搬运位置，不修改任何账号数据。\n');
+  process.stdout.write(
+    `凭证：不需要迁移，服务会依次读取 ${[config.credentialService, ...config.legacyCredentialServices].join('、')}。\n`
+  );
 };
 
 run();

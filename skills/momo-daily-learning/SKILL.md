@@ -31,10 +31,12 @@ description: 墨墨背单词的每日巩固流程：先确认 App 今天的复�
 
 | code | 处理 |
 |---|---|
-| `CREDENTIAL_MISSING`、`AUTHENTICATION_FAILED` | 请用户自己在插件目录 `dsh-momo-learning` 里运行 `npm run credential -- set` 写入凭证。**不得在对话里索要或接收令牌。** |
-| `CREDENTIAL_STORAGE_UNAVAILABLE` | 说明 Windows 凭据管理器当前不可用，请用户检查后再试。 |
-| `RATE_LIMITED` | 告诉用户按 `retryAfterSeconds` 等多久后再试。 |
-| `UPSTREAM_UNAVAILABLE`、`UPSTREAM_PROTOCOL_ERROR` | 墨墨暂时连不上。可以问用户是否直接用本地镜像出题，但要说明：今天的作答结果没有同步到，今天 App 已判认识的词可能被再考一遍。 |
+| `AUTH_NOT_CONFIGURED`、`AUTH_INVALID` | 没有令牌或令牌已失效。请用户在客户端里配置墨墨令牌：DeepSeek Harness 写进凭据文件的 `MAIMEMO_TOKEN`，Claude Code 在插件设置里填写；改完重启客户端。**不得在对话里索要或接收令牌。** |
+| `AUTH_FORBIDDEN` | 令牌没有所需的读取权限，请用户在墨墨开放平台检查令牌。 |
+| `CREDENTIAL_STORAGE_UNAVAILABLE` | 系统凭据管理器当前不可用。请用户改在客户端里配置令牌（同上）。 |
+| `UPSTREAM_RATE_LIMITED` | 告诉用户按 `retryAfterSeconds` 等多久后再试。 |
+| `UPSTREAM_UNAVAILABLE`、`UPSTREAM_TIMEOUT`、`UPSTREAM_PROTOCOL_ERROR` | 墨墨暂时连不上。可以问用户是否直接用本地镜像出题，但要说明：今天的作答结果没有同步到，今天 App 已判认识的词可能被再考一遍。 |
+| `LOCAL_STORE_UNAVAILABLE` | 本地数据库读写失败。把 `message` 转述给用户，停在这一步。 |
 | 其他 | 把 `message` 转述给用户，停在这一步。 |
 
 ## 出题：从整个镜像取词，每天固定题量
@@ -99,16 +101,16 @@ maimemo_list_quiz_candidates({ limit: 20 })
 
 ## 怎么问：默认一题一题，用户可指定批量
 
-默认**一次只问一题**，每题都通过页面弹窗工具 `ask_user_question` 呈现，然后停下等用户作答。用户没有要求批量时，不得把整套题一次性写进回复。
+默认**一次只问一题**，每题都通过当前客户端的提问弹窗工具呈现（DeepSeek Harness 是 `ask_user_question`，Claude Code 是 `AskUserQuestion`），然后停下等用户作答。用户没有要求批量时，不得把整套题一次性写进回复。
 
 用户明确要求“一次性出完”“批量出题”等批量模式时，以用户指定的数量和呈现方式为准。批量题目之后只说“请按题号顺序回复答案”，**不得提供任何作答示例**，也不得展示答案序列、示范选项字母或其他可能泄露答案的格式提示。只要用户回复与题号顺序的对应关系清楚，就直接判题，不要求重新格式化。
 
 弹窗怎么填：
 
-- `question` 放题干；`options` 放候选答案。
-- 需要用户自己输入的题：不给 `options`，答案会回到 `custom` 字段。
-- 每题给稳定的 `id`（`q1`、`q2`…），便于回看与统计。
-- 若当前环境没有 `ask_user_question`，默认退化为**一次一题**的普通消息提问；用户明确要求批量模式时，仍按上面的批量规则执行。
+- `question` 放题干；`options` 放候选答案。`AskUserQuestion` 每次调用只放一道题，`multiSelect` 为 `false`。
+- 需要用户自己输入的题：用 `ask_user_question` 时不给 `options`，答案会回到 `custom` 字段；`AskUserQuestion` 至少需要 2 个选项，这类题改用普通消息提问。用户在 `AskUserQuestion` 弹窗里选自带的 “Other” 并自行输入时，按输入内容判题。
+- 每题给稳定的题号（`q1`、`q2`…），便于回看与统计：`ask_user_question` 放在 `id`，`AskUserQuestion` 放在 `header`。
+- 若当前环境没有提问弹窗工具，默认退化为**一次一题**的普通消息提问；用户明确要求批量模式时，仍按上面的批量规则执行。
 
 ### 每题的固定顺序
 
@@ -170,7 +172,7 @@ maimemo_list_quiz_candidates({ limit: 20 })
 
 日报是生成内容，必须标明**不是墨墨账号原文**。
 
-**日报落盘成文件，不要只留在对话里。** 用 `write` 写到工作区的 `reports/` 目录，文件名 `momo-YYYY-MM-DD.md`，日期用开场记下的 `day`：
+**日报落盘成文件，不要只留在对话里。** 用写文件工具（DeepSeek Harness 是 `write`，Claude Code 是 `Write`）写到工作区的 `reports/` 目录，文件名 `momo-YYYY-MM-DD.md`，日期用开场记下的 `day`：
 
 - 每天一个文件，同名文件直接覆盖——当天重做一批就以最后一批为准；
 - 文件开头写日期、题数、对错数与错题本规模，正文放错词清单与「需要加强的知识点」；

@@ -1,5 +1,5 @@
 /**
- * Self-check for an installed dsh-momo-learning bundle.
+ * Self-check for an installed momo-learning bundle.
  *
  * Run it from inside the profile directory the bundle was installed into, so
  * `@deepseek-ai/dsh-app-boot` and this package both resolve:
@@ -26,11 +26,11 @@ let basePatch
 let bundlePatch
 try {
     basePatch = require.resolve('@deepseek-ai/dsh-base/cordis.patch.yml')
-    bundlePatch = require.resolve('dsh-momo-learning/cordis.patch.yml')
+    bundlePatch = require.resolve('momo-learning/cordis.patch.yml')
 } catch (error) {
     console.error(
         'Cannot resolve the packages to verify. Run this file from inside the profile\n'
-        + 'directory that has both @deepseek-ai/dsh-base and dsh-momo-learning installed.\n'
+        + 'directory that has both @deepseek-ai/dsh-base and momo-learning installed.\n'
         + String(error),
     )
     process.exit(1)
@@ -48,10 +48,10 @@ const expectedTools = [
 
 const failures = []
 const patches = [
-    ...loadOverlayPatches('verify-dsh-momo-learning', basePatch),
-    ...loadOverlayPatches('verify-dsh-momo-learning', bundlePatch),
+    ...loadOverlayPatches('verify-momo-learning', basePatch),
+    ...loadOverlayPatches('verify-momo-learning', bundlePatch),
 ]
-const ctx = await boot('verify-dsh-momo-learning', rootConfig, patches)
+const ctx = await boot('verify-momo-learning', rootConfig, patches)
 try {
     const skills = ctx.get('skills')
     const catalog = await skills.list()
