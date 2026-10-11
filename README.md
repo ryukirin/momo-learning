@@ -55,7 +55,16 @@ refs:
 /plugin install momo-learning@momo-learning
 ```
 
+这里的「插件市场」只是仓库里的 `.claude-plugin/marketplace.json`，告诉 Claude Code 这个仓库里有哪个插件，不需要提交到任何地方。Claude Code 会把插件拷进自己的缓存目录，并按根目录的 `package-lock.json` 装好依赖。
+
 启用插件时会提示填写「墨墨开放 API 令牌」。这一项标记为敏感，令牌存进系统的安全存储，不写进 `settings.json`；MCP 服务启动时通过环境变量 `MAIMEMO_TOKEN` 拿到它。装好后开一个新会话。
+
+不经过 GitHub 的两种装法：
+
+- 本地目录：把上面第一条命令的 `ryukirin/momo-learning` 换成本机克隆目录的路径
+- 放进 Skill 目录：把仓库克隆到 `~/.claude/skills/momo-learning`，Claude Code 启动时直接加载
+
+这两种都直接从原目录加载，不会替你装依赖。要用系统凭据管理器保存令牌的话，先在仓库根目录跑一次 `npm install`。
 
 ### 令牌的其他来源
 

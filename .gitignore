@@ -10,3 +10,7 @@ node_modules/
 *.sqlite-wal
 *.sqlite-shm
 *.log
+
+# Daily reports and machine-local Claude Code approvals are personal; never commit them.
+reports/
+.claude/settings.local.json
